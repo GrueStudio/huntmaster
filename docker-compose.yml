@@ -3,13 +3,13 @@ services:
   db:
     image: postgres:14-alpine
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      - postgres_dat:/var/lib/postgresql/data/
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
     ports: # Corrected ports section
-      - "${DB_PORT}:${DB_PORT}" # Ensure both host and container ports are specified
+      - "${DB_PORT}:5432" # Ensure both host and container ports are specified
   web:
     build: .
     ports:
@@ -24,3 +24,6 @@ services:
       - DB_NAME=${DB_NAME}
     volumes:
       - ./app:/app
+    #command: tail -f /dev/null # Override the CMD
+volumes:
+  postgres_dat: # Define the volume here
