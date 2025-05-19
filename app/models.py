@@ -1,4 +1,5 @@
 import os
+import bcrypt
 from typing import List, Optional
 from datetime import datetime, timedelta
 import pytz  # For handling time zones
@@ -8,7 +9,6 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Foreign
 from sqlalchemy.orm import relationship, backref, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from passlib.hash import bcrypt
 import unittest
 from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
@@ -26,16 +26,20 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
 
     def set_password(self, password):
-        self.password_hash = bcrypt.hash(password)
+        password = password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        self.password_hash = str(bcrypt.hashpw(password, salt),'utf-8')
 
     def check_password(self, password):
-        return bcrypt.verify(str(self.password_hash), password) # added str
+        password = bytes(password.encode('utf-8'))
+        password_hash = bytes(str(self.password_hash), 'utf-8')
+        return bcrypt.checkpw(password, password_hash) # added str
 
     def set_email_hash(self, email): # Added email hashing function
-        self.email_hash = bcrypt.hash(email)
+        self.email_hash = email
 
     def check_email_hash(self, email):
-        return bcrypt.verify(str(self.email_hash), email) # added str
+        return self.email_hash == email # added str
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -51,6 +55,8 @@ class Character(Base):
     verified = Column(Boolean, default=False, nullable=False)  # Added verified field
     user = relationship('User', back_populates='characters')
     world = relationship('World', backref='characters')
+    bids = relationship('Bid', back_populates='character')  # This line is related to the error.
+    hunts = relationship('Hunt', back_populates='character')
     def __repr__(self):
         return f'<Character {self.name}>'
 
@@ -95,7 +101,7 @@ class Points(Base):
         UniqueConstraint('character_id', 'spawn_id', name='_character_spawn_points_uc'),
     )
     def __repr__(self):
-        return f'<Points {self.points} for Character {self.character_id} on Spawn {self.spawn_id}>'
+        return f'<Points {self.points:.2f} for Character {self.character_id} on Spawn {self.spawn_id}>'
 
 class Bid(Base):
     __tablename__ = 'bids'
