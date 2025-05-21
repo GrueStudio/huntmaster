@@ -20,7 +20,6 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(80), unique=True, nullable=False)
     password_hash = Column(String(120), nullable=False)
-    email_hash = Column(String(120), unique=True, nullable=False) # Changed to store hashed email
     discord_id = Column(String(50), unique=True, nullable=True)  # Added for Discord integration
     characters = relationship('Character', back_populates='user', lazy='joined')
     is_admin = Column(Boolean, default=False)
