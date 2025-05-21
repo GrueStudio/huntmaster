@@ -22,6 +22,7 @@ class User(Base):
     password_hash = Column(String(120), nullable=False)
     discord_id = Column(String(50), unique=True, nullable=True)  # Added for Discord integration
     characters = relationship('Character', back_populates='user', lazy='joined')
+    recovery_tokens = relationship('RecoveryToken', back_populates='user', lazy='joined')
     is_admin = Column(Boolean, default=False)
 
     def set_password(self, password):

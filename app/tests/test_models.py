@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import event
 
 # Import your models
-from app.models import User, Character, World, Spawn, Points, Bid, Hunt, Base  # Adjust the import path if needed
+from app.models import User, Character, World, Spawn, Points, Bid, Hunt, RecoveryToken, Base  # Adjust the import path if needed
 
 # Use an in-memory SQLite database for testing.  This is faster and doesn't require a separate database server.
 TEST_DB_URL = "sqlite:///:memory:"
@@ -77,7 +77,6 @@ class TestModels(unittest.TestCase):
         """
         # Create a new user.
         user = User(username='testuser')
-        user.set_email_hash('email@mail.gg')
         user.set_password('password')
         self.db.add(user)
         self.db.commit()
@@ -95,7 +94,7 @@ class TestModels(unittest.TestCase):
         relationships with User and World, and the string representation.
         """
         # Create a user and a world for the character.
-        user = User(username='testuser', email_hash='test@example.com')
+        user = User(username='testuser')
         user.set_password('password')
         world = World(name='TestWorld')
         self.db.add_all([user, world])
@@ -112,6 +111,58 @@ class TestModels(unittest.TestCase):
         self.assertEqual(retrieved_character.user.username, 'testuser')
         self.assertEqual(retrieved_character.world.name, 'TestWorld')
         self.assertEqual(repr(retrieved_character), '<Character TestCharacter>')
+
+
+    def test_recovery_token_model(self):
+        """
+        Test the RecoveryToken model. This includes testing token creation,
+        relationships with User, and uniqueness constraints.
+        """
+        # Create a user first, as a recovery token must be associated with a user.
+        user = User(username='tokenuser')
+        user.set_password('tokenpassword')
+        self.db.add(user)
+        self.db.commit()
+
+        # Create a recovery token.
+        token_value = "some_unique_recovery_token_string"
+        expiration = datetime.utcnow() + timedelta(hours=1)
+        recovery_token = RecoveryToken(
+            user=user,
+            token=token_value,
+            expiration_time=expiration,
+            used=False
+        )
+        self.db.add(recovery_token)
+        self.db.commit()
+
+        # Retrieve the token and assert its attributes.
+        retrieved_token = self.db.query(RecoveryToken).filter_by(token=token_value).first()
+        self.assertIsNotNone(retrieved_token)
+        self.assertEqual(retrieved_token.user_id, user.id)
+        self.assertEqual(retrieved_token.token, token_value)
+        self.assertEqual(retrieved_token.expiration_time, expiration)
+        self.assertFalse(retrieved_token.used)
+        self.assertIsNotNone(retrieved_token.created_at)
+        self.assertEqual(str(retrieved_token), f'<RecoveryToken {token_value[:10]}... for User {user.id}>')
+
+        # Test uniqueness constraint on the token.
+        with self.assertRaises(IntegrityError):
+            duplicate_token = RecoveryToken(
+                user=user,
+                token=token_value,  # Same token value
+                expiration_time=datetime.utcnow() + timedelta(hours=2),
+                used=False
+            )
+            self.db.add(duplicate_token)
+            self.db.commit()
+        self.db.rollback() # Rollback the session after the failed commit
+
+        # Test marking a token as used
+        retrieved_token.used = True
+        self.db.commit()
+        self.assertTrue(retrieved_token.used)
+
 
     def test_world_model(self):
         """
@@ -159,7 +210,7 @@ class TestModels(unittest.TestCase):
         for a character on a spawn, and the string representation.
         """
         # Create a user, world, character, and spawn.
-        user = User(username='testuser', email_hash='test@example.com')
+        user = User(username='testuser')
         user.set_password('password')
         world = World(name='TestWorld')
         self.db.add_all([user, world])
@@ -187,7 +238,7 @@ class TestModels(unittest.TestCase):
         and constraints.
         """
         # Create a user, world, character, and spawn.
-        user = User(username='testuser', email_hash='test@example.com')
+        user = User(username='testuser')
         user.set_password('password')
         world = World(name='TestWorld')
         self.db.add_all([user, world])
@@ -240,7 +291,7 @@ class TestModels(unittest.TestCase):
         Test the Hunt model.  This includes testing hunt creation and relationships.
         """
         # Create a user, world, character, and spawn.
-        user = User(username='testuser', email_hash='test@example.com')
+        user = User(username='testuser')
         user.set_password('password')
         world = World(name='TestWorld')
         self.db.add_all([user, world])
