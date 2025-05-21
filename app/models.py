@@ -43,6 +43,20 @@ class User(Base):
     def __repr__(self):
         return f'<User {self.username}>'
 
+class RecoveryToken(Base):
+    __tablename__ = 'recovery_tokens'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    token = Column(String(255), unique=True, nullable=False)
+    expiration_time = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+
+    user = relationship('User', back_populates='recovery_tokens')
+
+    def __repr__(self):
+        return f'<RecoveryToken {self.token[:10]}... for User {self.user_id}>'
+
 class Character(Base):
     __tablename__ = 'characters'
     id = Column(Integer, primary_key=True)
