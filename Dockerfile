@@ -12,7 +12,6 @@ WORKDIR /huntmaster
 # Install any needed packages specified in requirements.txt
 # Install postgres client for alembic
 RUN pip install --no-cache-dir -r /huntmaster/requirements.txt
-RUN pip install alembic
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000

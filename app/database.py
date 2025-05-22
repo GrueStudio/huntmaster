@@ -5,6 +5,7 @@ Filename: database.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from typing import Generator
+from models import Base
 
 # Get the database URL from the environment variable.
 # If the environment variable is not set, use a default value.
@@ -13,14 +14,18 @@ from typing import Generator
 import os
 
 # Option 1: Using a simple string (less flexible, hardcoded)
-# SQLALCHEMY_DATABASE_URL = "postgresql://user:password@postgresserver/database_name"
+
 
 # Option 2: Using an environment variable (more flexible)
 # This is better for security (passwords) and deployment.
-SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_USER = os.environ.get("DB_USER")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
+DB_HOST = os.environ.get("DB_HOST")
+DB_PORT = os.environ.get("DB_PORT")
+DB_NAME = os.environ.get("DB_NAME")
 #Note: the above line will use the environment variable DATABASE_URL if it is set
 # otherwise it will default to  "postgresql://user:password@postgresserver/database_name"
-
+SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Check if the database URL is set.  If not, raise an exception.
 if not SQLALCHEMY_DATABASE_URL:

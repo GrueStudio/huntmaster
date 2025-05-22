@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Dashboard - HuntMaster</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+            }
+        </style>
+        <script>
+            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body
+        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
+    >
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl text-center">
+            <h1 class="text-4xl font-bold text-white mb-4">
+                Welcome to HuntMaster,
+                <span class="text-blue-green">{{ username }}</span>!
+            </h1>
+            <p class="text-lg text-gray-300 mb-6">
+                This is your basic dashboard.
+            </p>
+            <div class="space-x-4">
+                <a
+                    href="/logout"
+                    class="bg-caput-mortuum hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-caput-mortuum focus:ring-opacity-75 transition duration-300"
+                    >Logout</a
+                >
+            </div>
+        </div>
+    </body>
+</html>
