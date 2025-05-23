@@ -1,17 +1,10 @@
-import os
 import bcrypt
-from typing import List, Optional
-from datetime import datetime, timedelta
-import pytz  # For handling time zones
-from dotenv import load_dotenv
+import uuid
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric
-from sqlalchemy.orm import relationship, backref, sessionmaker
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-import unittest
-from sqlalchemy import event
-from sqlalchemy.exc import IntegrityError
 
 Base = declarative_base()
 
@@ -34,12 +27,6 @@ class User(Base):
         password = bytes(password.encode('utf-8'))
         password_hash = bytes(str(self.password_hash), 'utf-8')
         return bcrypt.checkpw(password, password_hash) # added str
-
-    def set_email_hash(self, email): # Added email hashing function
-        self.email_hash = email
-
-    def check_email_hash(self, email):
-        return self.email_hash == email # added str
 
     def __repr__(self):
         return f'<User {self.username}>'
