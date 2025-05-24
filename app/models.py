@@ -1,10 +1,11 @@
 import bcrypt
-import uuid
+import hashlib
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
+from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
 
@@ -48,18 +49,51 @@ class RecoveryToken(Base):
 class Character(Base):
     __tablename__ = 'characters'
     id = Column(Integer, primary_key=True)
-    name = Column(String(80), unique=True, nullable=False) # Changed to store character name
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(80), unique=True, nullable=False) # This is now the Tibia.com name, globally unique
+    level = Column(Integer, nullable=False) # Added back, nullable
+    vocation = Column(String(50), nullable=False) # Added back, nullable
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True) # Changed to nullable for disown
     last_login = Column(DateTime, nullable=True)
     world_id = Column(Integer, ForeignKey('worlds.id'), nullable=False)
-    verification_id = Column(String(120), unique=True, nullable=True) # Added for character verification
-    verified = Column(Boolean, default=False, nullable=False)  # Added verified field
+    validation_hash = Column(String(120), unique=True, nullable=True) # NULL means validated, non-NULL means pending validation
+
     user = relationship('User', back_populates='characters')
     world = relationship('World', backref='characters')
-    bids = relationship('Bid', back_populates='character')  # This line is related to the error.
+    bids = relationship('Bid', back_populates='character')
     hunts = relationship('Hunt', back_populates='character')
+
+    # Hybrid property for 'validated' status
+    @hybrid_property
+    def validated(self):
+        """Returns True if the character is validated (validation_hash is NULL)."""
+        return self.validation_hash is None
+
+    @validated.expression
+    def validated(cls):
+        """SQL expression for the validated property."""
+        return cls.validation_hash.is_(None)
+
+    # Removed UniqueConstraint('user_id', 'name') as name is now globally unique (Tibia.com name)
+
     def __repr__(self):
         return f'<Character {self.name}>'
+
+# SQLAlchemy event listener to generate validation_hash before insert
+@event.listens_for(Character, 'before_insert')
+def receive_before_insert(mapper, connection, target):
+    """
+    Generate validation_hash if not already set and user_id is present.
+    The hash is MD5(username + character_name).
+    """
+    # Only generate if user_id is set and validation_hash is not explicitly provided
+    if target.user_id is not None and target.validation_hash is None:
+        # Ensure the user object is loaded to get the username.
+        # This might trigger a flush if the user is new, but it's necessary
+        # to get the username for hashing.
+        user = target.user
+        if user: # Check if user relationship is loaded and not None
+            combined_string = f"{user.username}{target.name}"
+            target.validation_hash = hashlib.md5(combined_string.encode()).hexdigest()
 
 class World(Base):
     __tablename__ = 'worlds'
