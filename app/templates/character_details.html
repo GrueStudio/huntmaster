@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Character Details - HuntMaster</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+            }
+        </style>
+        <script>
+            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body
+        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
+    >
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-2xl">
+            <h2 class="text-3xl font-bold text-center text-white mb-6">
+                Character Details:
+                <span class="text-blue-green">{{ character.name }}</span>
+            </h2>
+
+            <div class="space-y-4 text-gray-300">
+                <p>
+                    <strong>Level:</strong> {{ character.level if
+                    character.level is not none else 'N/A' }}
+                </p>
+                <p>
+                    <strong>Vocation:</strong> {{ character.vocation if
+                    character.vocation is not none else 'N/A' }}
+                </p>
+                <p>
+                    <strong>Validated:</strong>
+                    {% if character.validated %}
+                    <span class="text-green-400">Yes</span>
+                    {% else %}
+                    <span class="text-red-400">No</span>
+                    {% endif %}
+                </p>
+
+                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
+                    Bid History
+                </h3>
+                <div class="bg-gray-700 p-4 rounded-md">
+                    <p class="text-gray-400">
+                        No bid history available yet. (Placeholder)
+                    </p>
+                    {# Future: Loop through bids here #} {#
+                    <ul class="list-disc list-inside">
+                        {% for bid in character.bids %}
+                        <li>
+                            Bid ID: {{ bid.id }} - Points: {{ bid.bid_points }}
+                            - Start:
+                            <span
+                                class="local-datetime"
+                                data-utc-time="{{ bid.hunt_window_start.isoformat() }}Z"
+                            ></span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    #}
+                </div>
+
+                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
+                    Hunt History
+                </h3>
+                <div class="bg-gray-700 p-4 rounded-md">
+                    <p class="text-gray-400">
+                        No hunt history available yet. (Placeholder)
+                    </p>
+                    {# Future: Loop through hunts here #} {#
+                    <ul class="list-disc list-inside">
+                        {% for hunt in character.hunts %}
+                        <li>
+                            Hunt ID: {{ hunt.id }} - Start:
+                            <span
+                                class="local-datetime"
+                                data-utc-time="{{ hunt.start_time.isoformat() }}Z"
+                            ></span>
+                            - End:
+                            <span
+                                class="local-datetime"
+                                data-utc-time="{{ hunt.end_time.isoformat() }}Z"
+                            ></span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    #}
+                </div>
+            </div>
+
+            <div class="text-center mt-8 space-x-4">
+                <a
+                    href="/account-recovery"
+                    class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+                    >Back to My Characters</a
+                >
+                <a
+                    href="/dashboard"
+                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                    >Back to Dashboard</a
+                >
+            </div>
+        </div>
+        <script src="/static/localize_time.js"></script>
+    </body>
+</html>

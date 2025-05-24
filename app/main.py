@@ -13,7 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 # Assuming database.py and models.py are in the same 'app' directory
 from database import get_db # Import Base and engine for table creation in dev
-from models import User, RecoveryToken # Import your User model
+from models import User, RecoveryToken, Character # Import your User model
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -305,6 +305,34 @@ async def consume_recovery_token(
             "account_recovery.html",
             {"request": request, "logged_in_user": None, "error": error_message, "message": None}
         )
+
+
+@app.get("/characters/{character_name}", response_class=HTMLResponse)
+async def view_character_detail(
+    request: Request,
+    character_name: str, # This is the path parameter
+    db: Session = Depends(get_db)
+):
+    """
+    Displays the detail page for a specific character.
+    """
+
+    # Fetch the character by name and ensure it belongs to the logged-in user
+    character = db.query(Character).filter(
+        Character.name == character_name
+    ).first()
+
+    if not character:
+        # If character not found or not owned by user, redirect to my characters with an error
+        return RedirectResponse(
+            url="/account-recovery?error=Character not found or you do not own it.",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    return templates.TemplateResponse(
+        "character_detail.html",
+        {"request": request, "character": character}
+    )
 
 
 
