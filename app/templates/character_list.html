@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>All Characters - HuntMaster</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+            }
+        </style>
+        <script>
+            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body
+        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
+    >
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-2xl">
+            <h2 class="text-3xl font-bold text-center text-white mb-6">
+                All Characters
+            </h2>
+
+            {% if message %}
+            <div
+                class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+            >
+                {{ message }}
+            </div>
+            {% endif %} {% if error %}
+            <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+                {{ error }}
+            </div>
+            {% endif %} {% if characters %}
+            <ul class="space-y-4">
+                {% for character in characters %}
+                <li
+                    class="bg-gray-700 p-4 rounded-md flex justify-between items-center"
+                >
+                    <div>
+                        <p class="text-lg font-semibold text-white">
+                            <a
+                                href="/characters/{{ character.name }}"
+                                class="text-blue-green hover:underline"
+                            >
+                                {{ character.name }}
+                            </a>
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Level: {{ character.level if character.level is not
+                            none else 'N/A' }} | Vocation: {{ character.vocation
+                            if character.vocation is not none else 'N/A' }}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            World: {{ character.world.name if character.world
+                            else 'N/A' }}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Validated: {% if character.user and
+                            character.validation_hash is none %}
+                            <span class="text-green-400">Yes</span>
+                            {% elif character.user and character.validation_hash
+                            is not none %}
+                            <span class="text-yellow-400"
+                                >Pending Validation</span
+                            >
+                            {% else %}
+                            <span class="text-red-400">No (Unclaimed)</span>
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    {# Action buttons based on ownership and verification status
+                    #} {% if character.user_id == request.session.get('user_id')
+                    %} {% if character.validation_hash is not none %}
+                    <form action="/character/verify" method="get">
+                        <input
+                            type="hidden"
+                            name="character_name"
+                            value="{{ character.name }}"
+                        />
+                        <button
+                            type="submit"
+                            class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+                        >
+                            Verify
+                        </button>
+                    </form>
+                    {% else %}
+                    <form action="/characters/disown" method="post">
+                        <input
+                            type="hidden"
+                            name="character_name"
+                            value="{{ character.name }}"
+                        />
+                        <button
+                            type="submit"
+                            class="bg-caput-mortuum hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-caput-mortuum focus:ring-opacity-75 transition duration-300"
+                        >
+                            Disown
+                        </button>
+                    </form>
+                    {% endif %} {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-gray-300 text-center">
+                No characters found in the system.
+            </p>
+            {% endif %}
+
+            <h3 class="text-xl font-semibold text-white mb-4 mt-8">
+                Add New Character
+            </h3>
+            <form action="/characters" method="post" class="space-y-4">
+                <div>
+                    <label
+                        for="name"
+                        class="block text-gray-300 text-sm font-medium mb-1"
+                        >Tibia Character Name</label
+                    >
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        required
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+                    />
+                </div>
+                {# Level, World, Vocation are now fetched from TibiaData.com #}
+                <button
+                    type="submit"
+                    class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+                >
+                    Add Character
+                </button>
+            </form>
+
+            <div class="text-center mt-8">
+                <a
+                    href="/dashboard"
+                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                    >Back to Dashboard</a
+                >
+            </div>
+        </div>
+    </body>
+</html>

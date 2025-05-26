@@ -24,6 +24,6 @@ services:
       - DB_NAME=${DB_NAME}
     volumes:
       - ./app:/app
-    #command: tail -f /dev/null # Override the CMD
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info # Override the CMD
 volumes:
   postgres_dat: # Define the volume here
