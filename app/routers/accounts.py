@@ -111,15 +111,11 @@ async def get_account_recovery(request: Request, db: Session = Depends(get_db)):
             return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
         # Fetch characters for the logged-in user
-        # Note: Character import will be moved to characters.py router
-        # For now, we need it here to pass to the template
-        from models import Character, World # Temporary import for this template context
-        characters = db.query(Character).filter(Character.user_id == user.id).order_by(Character.name).all()
-        worlds = db.query(World).order_by(World.name).all()
+        tokens = db.query(RecoveryToken).filter(RecoveryToken.user_id == user_id).all()
 
         return templates.TemplateResponse(
             "account_recovery.html",
-            {"request": request, "logged_in_user": user, "characters": characters, "worlds": worlds, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
+            {"request": request, "logged_in_user": user, "tokens": tokens, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
         )
     else:
         return templates.TemplateResponse(
@@ -131,10 +127,12 @@ async def get_account_recovery(request: Request, db: Session = Depends(get_db)):
 async def generate_recovery_token(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get('user_id')
     if not user_id:
+        logger.error("User ID not found in session")
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
+        logger.error("User not found")
         request.session.pop('user_id', None)
         request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -150,7 +148,7 @@ async def generate_recovery_token(request: Request, db: Session = Depends(get_db
     db.refresh(user)
 
     token_value = str(uuid.uuid4())
-    expiration_time = datetime.now(UTC) + timedelta(hours=1)
+    expiration_time = datetime.now(UTC) + timedelta(days=90)
 
     new_token = RecoveryToken(
         user_id=user.id,
@@ -162,6 +160,7 @@ async def generate_recovery_token(request: Request, db: Session = Depends(get_db
     db.commit()
     db.refresh(new_token)
 
+    logger.info(f"New recovery token generated for user {token_value}")
     return RedirectResponse(url="/account-recovery", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post(
@@ -201,6 +200,7 @@ async def consume_recovery_token(
         error_message = "Token has expired."
 
     if error_message:
+        logger.error(f"Account recovery failed for token {token}: {error_message}")
         return templates.TemplateResponse(
             "account_recovery.html",
             {"request": request, "logged_in_user": None, "error": error_message, "message": None, "now_utc_naive": get_now_utc_naive()}

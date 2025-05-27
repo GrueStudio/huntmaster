@@ -1,5 +1,6 @@
 import hashlib
 import httpx
+from datetime import datetime
 
 from fastapi import APIRouter, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -433,19 +434,55 @@ async def validate_character(
         auto_validated_chars_names = [character_to_validate.name] # Start with the main character
         for other_char_info in tibia_other_characters:
             other_char_name = other_char_info.get('name')
-            other_char_world_name = other_char_info.get('world')
 
             # Skip if it's the main character (already handled)
             if other_char_name == character_to_validate.name:
                 continue
 
+            # Fetch full details for the other character
+            other_char_level = None
+            other_char_vocation = None
+            other_char_world_name = None
+            other_char_last_login = None
+
+            TIBIADATA_OTHER_CHARACTER_API = f"https://api.tibiadata.com/v4/character/{other_char_name}"
+            try:
+                async with httpx.AsyncClient() as client:
+                    other_response = await client.get(TIBIADATA_OTHER_CHARACTER_API)
+                    other_response.raise_for_status()
+                    other_tibia_data = other_response.json()
+
+                other_character_info = other_tibia_data.get('character', {}).get('character', {})
+                if other_character_info:
+                    other_char_level = other_character_info.get('level')
+                    other_char_vocation = other_character_info.get('vocation')
+                    other_char_world_name = other_character_info.get('world')
+                    other_char_last_login_str = other_character_info.get('last_login')
+                    if other_char_last_login_str:
+                        other_char_last_login = datetime.fromisoformat(other_char_last_login_str.replace('Z', '+00:00'))
+                else:
+                    logger.warning(f"Could not fetch full details for other character: {other_char_name}")
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error fetching TibiaData for other character {other_char_name}: {e.response.status_code} - {e.response.text}")
+                continue # Skip to next character if API call fails
+            except httpx.RequestError as e:
+                logger.error(f"Network error fetching TibiaData for other character {other_char_name}: {e}")
+                continue # Skip to next character
+            except Exception as e:
+                logger.error(f"Unexpected error fetching TibiaData for other character {other_char_name}: {e}", exc_info=True)
+                continue # Skip to next character
+
+
             # Find or create world for other character
-            other_world = db.query(World).filter(World.name == other_char_world_name).first()
-            if not other_world:
-                other_world = World(name=other_char_world_name, location="Unknown")
-                db.add(other_world)
-                db.flush() # Flush to get ID for new world
-                logger.info(f"Created new world entry for other character during validation: {other_world.name}")
+            other_world = None
+            if other_char_world_name:
+                other_world = db.query(World).filter(World.name == other_char_world_name).first()
+                if not other_world:
+                    other_world = World(name=other_char_world_name, location="Unknown")
+                    db.add(other_world)
+                    db.flush() # Flush to get ID for new world
+                    logger.info(f"Created new world entry for other character during validation: {other_world.name}")
 
             # Check if this other character exists in our DB and belongs to the current user and is unvalidated
             existing_other_char_in_db = db.query(Character).filter(
@@ -456,27 +493,45 @@ async def validate_character(
 
             if existing_other_char_in_db:
                 existing_other_char_in_db.validation_hash = None # Mark as validated
-                existing_other_char_in_db.world_id = other_world.id # Update world in case it changed
+                existing_other_char_in_db.verified = True # Set verified to True
+                existing_other_char_in_db.world_id = other_world.id if other_world else existing_other_char_in_db.world_id # Update world
+                existing_other_char_in_db.level = other_char_level # Update level
+                existing_other_char_in_db.vocation = other_char_vocation # Update vocation
+                existing_other_char_in_db.last_login = other_char_last_login # Update last_login
                 db.add(existing_other_char_in_db)
                 auto_validated_chars_names.append(other_char_name)
+                logger.info(f"Auto-validated existing character {other_char_name} for user {user.username}.")
             else:
                 # If the other character is not in our DB, create it as validated for this user
-                new_other_character = Character(
-                    name=other_char_name,
-                    level=None, # Not available in other_characters list
-                    vocation=None, # Not available in other_characters list
-                    user_id=user.id,
-                    world_id=other_world.id,
-                    validation_hash=None, # Automatically validated
-                    last_login=None # Not available in other_characters list
-                )
-                db.add(new_other_character)
-                auto_validated_chars_names.append(other_char_name)
+                # Only create if it's not owned by another user
+                already_owned_by_someone_else = db.query(Character).filter(
+                    Character.name == other_char_name,
+                    Character.user_id.isnot(None),
+                    Character.user_id != user.id
+                ).first()
+
+                if not already_owned_by_someone_else and other_world: # Ensure world is found/created
+                    new_other_character = Character(
+                        name=other_char_name,
+                        level=other_char_level,
+                        vocation=other_char_vocation,
+                        user_id=user.id,
+                        world_id=other_world.id,
+                        validation_hash=None, # Automatically validated
+                        last_login=other_char_last_login
+                    )
+                    db.add(new_other_character)
+                    auto_validated_chars_names.append(other_char_name)
+                    logger.info(f"Auto-created and validated new character {other_char_name} for user {user.username}.")
+                elif already_owned_by_someone_else:
+                    logger.info(f"Skipping auto-validation for {other_char_name} as it's already owned by another user.")
+                else:
+                    logger.warning(f"Skipping auto-validation for {other_char_name} due to missing world information.")
 
         db.commit() # Commit all changes in one transaction
 
         message_text = f"Character '{character_name}' and associated characters ({', '.join(auto_validated_chars_names)}) have been successfully verified!"
-        logger.info(f"Character '{character_name}' and associated characters have been successfully verified.")
+        logger.info(f"User {user.username} successfully validated {character_name} and auto-validated: {auto_validated_chars_names}")
         return RedirectResponse(
             url=f"/characters?message={message_text}",
             status_code=status.HTTP_303_SEE_OTHER
@@ -485,13 +540,113 @@ async def validate_character(
     except IntegrityError as e:
         db.rollback()
         error_message = f"Database error during validation: {e}"
-        logger.error(f"Integrity Error during character validation: {e}")
+        logger.error(f"Integrity Error during character validation for {character_name}: {e}")
     except Exception as e:
         db.rollback()
         error_message = f"An unexpected error occurred during character validation: {e}"
-        logger.error(f"Error during character validation: {e}")
+        logger.error(f"Unexpected error during character validation for {character_name}: {e}", exc_info=True)
 
     return RedirectResponse(
         url=f"/character/verify?character_name={character_name}&error={error_message}",
         status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+@router.get("/character/disown", response_class=HTMLResponse)
+async def get_disown_character_page(
+    request: Request,
+    character_name: str, # Expected as a query parameter
+    db: Session = Depends(get_db)
+):
+    """
+    Displays a confirmation page to disown a character, showing its stats.
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        logger.info(f"Unauthorized access to disown confirmation page for {character_name}, redirecting to login.")
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        logger.error(f"User ID {user_id} not found in DB during disown confirmation page access. Session may be stale.")
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    character_to_disown = db.query(Character).filter(
+        Character.name == character_name,
+        Character.user_id == user.id, # Must be owned by the current user
+    ).first()
+
+    if not character_to_disown:
+        logger.warning(f"User {user.username} attempted to access disown page for non-existent, or unowned: {character_name}")
+        return RedirectResponse(
+            url="/characters?error=Character not found, or not owned by you.",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    message = request.query_params.get("message")
+    error = request.query_params.get("error")
+
+    logger.info(f"User {user.username} accessing disown confirmation page for {character_name}.")
+    return templates.TemplateResponse(
+        "character_disown_confirm.html",
+        {
+            "request": request,
+            "character": character_to_disown,
+            "message": message,
+            "error": error
+        }
+    )
+
+
+@router.post("/character/disown", response_class=HTMLResponse)
+async def disown_character(
+    request: Request,
+    character_name: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Allows a logged-in user to disown a character they currently own.
+    Sets user_id to None and validation_hash to None.
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        logger.warning("Attempt to disown character by unauthenticated user.")
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        logger.error(f"User ID {user_id} not found in DB during disown. Session may be stale.")
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    character_to_disown = db.query(Character).filter(
+        Character.name == character_name,
+        Character.user_id == user.id, # Must be owned by the current user
+    ).first()
+
+    if not character_to_disown:
+        logger.warning(f"User {user.username} attempted to disown non-existent, or unowned: {character_name}")
+        return RedirectResponse(
+            url=f"/characters?error=Character not found, or not owned by you.",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    try:
+        db.delete(character_to_disown)
+        db.commit()
+        logger.info(f"User {user.username} successfully disowned character: {character_name}")
+        return RedirectResponse(
+            url=f"/characters?message=Character '{character_name}' has been successfully disowned.",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+    except Exception as e:
+        db.rollback()
+        error_message = f"An unexpected error occurred while disowning character: {e}"
+        logger.error(f"Error disowning character {character_name} for user {user.username}: {e}", exc_info=True)
+        return RedirectResponse(
+            url=f"/characters/disown?character_name={character_name}&error={error_message}", # Redirect back to confirm page on error
+            status_code=status.HTTP_303_SEE_OTHER
+        )

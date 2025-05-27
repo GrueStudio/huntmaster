@@ -108,8 +108,8 @@
                             Verify
                         </button>
                     </form>
-                    {% else %}
-                    <form action="/characters/disown" method="post">
+                    {% endif %} {% endif %}
+                    <form action="/character/disown" method="get">
                         <input
                             type="hidden"
                             name="character_name"
@@ -122,7 +122,6 @@
                             Disown
                         </button>
                     </form>
-                    {% endif %} {% endif %}
                 </li>
                 {% endfor %}
             </ul>
