@@ -91,10 +91,6 @@ async def update_worlds_from_tibiadata(db: Session):
 # --- Database Initialization (for development/testing) ---
 @app.on_event("startup")
 async def on_startup():
-    logger.info("Creating database tables (if they don't exist)...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/checked.")
-
     # Call the world update function on startup
     db_session = next(get_db()) # Get a session for the startup event
     try:
