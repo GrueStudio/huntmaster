@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 # Assuming database.py and models.py are in the same 'app' directory
-from database import get_db, engine
-from models import Base, World # Only import models directly used here
-from routers import accounts, characters # Import the new routers
+from database import get_db
+from models import World # Only import models directly used here
+from routers import accounts, characters, spawns # Import the new routers
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -107,6 +107,7 @@ async def on_shutdown():
 # --- Include Routers ---
 app.include_router(accounts.router)
 app.include_router(characters.router)
+app.include_router(spawns.router)
 
 # --- Main Routes ---
 
