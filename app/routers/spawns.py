@@ -55,7 +55,7 @@ async def get_world_page(
         }
     )
 
-@router.get("/spawns/{world_name}/propose-spawn", response_class=HTMLResponse)
+@router.get("/worlds/{world_name}/propose", response_class=HTMLResponse)
 async def get_propose_spawn_form(
     request: Request,
     world_name: str # Capture world_name from the path
@@ -77,7 +77,7 @@ async def get_propose_spawn_form(
         }
     )
 
-@router.post("/spawns/{world_name}/propose-spawn", response_class=HTMLResponse)
+@router.post("/worlds/{world_name}/propose", response_class=HTMLResponse)
 async def post_propose_spawn(
     request: Request,
     world_name: str,
@@ -163,5 +163,39 @@ async def post_propose_spawn(
             "world_name": world_name,
             "success": f"Spawn '{spawn_name}' in {world.name} has been successfully proposed and approved!",
             "message": "You can now view it in the world's spawn list."
+        }
+    )
+
+
+@router.get("/worlds/{world_name}/spawns/{spawn_name}", response_class=HTMLResponse) # Updated route
+async def get_spawn_detail_page(
+    request: Request,
+    world_name: str,
+    spawn_name: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Displays a dedicated page for a specific spawn within a world.
+    Both world_name and spawn_name lookups are case-insensitive.
+    """
+    # First, find the world
+    world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
+    if not world:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+
+    # Then, find the spawn within that world
+    spawn = db.query(Spawn).filter(
+        func.lower(Spawn.name) == spawn_name.lower(),
+        Spawn.world_id == world.id
+    ).first()
+    if not spawn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world")
+
+    return templates.TemplateResponse(
+        "spawn_detail.html",
+        {
+            "request": request,
+            "world": world,
+            "spawn": spawn
         }
     )
