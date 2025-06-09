@@ -37,28 +37,80 @@
     <body
         class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
     >
-        <div
-            class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md text-center"
-        >
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
             <h1 class="text-3xl font-bold text-white mb-4">
-                Propose a New Spawn
+                Propose a New Spawn for
+                <span class="text-blue-green">{{ world_name }}</span>
             </h1>
+
+            {% if error %}
+            <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+                {{ error }}
+            </div>
+            {% endif %} {% if success %}
+            <div
+                class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+            >
+                {{ success }}
+            </div>
+            {% endif %}
+
             <p class="text-lg text-gray-300 mb-6">{{ message }}</p>
-            <p class="text-gray-400 text-sm mb-6">
-                The form for proposing a new spawn will go here!
-            </p>
-            <a
-                href="/"
-                class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+
+            <form
+                action="/spawns/{{ world_name }}/propose-spawn"
+                method="post"
+                class="space-y-4"
             >
-                Back to Home
-            </a>
-            <a
-                href="/worlds/{{ world_name }}"
-                class="ml-4 bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
-            >
-                Back to World Page
-            </a>
+                <div>
+                    <label
+                        for="name"
+                        class="block text-gray-300 text-sm font-medium mb-1"
+                        >Spawn Name</label
+                    >
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        required
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+                    />
+                </div>
+                <div>
+                    <label
+                        for="description"
+                        class="block text-gray-300 text-sm font-medium mb-1"
+                        >Description (Optional)</label
+                    >
+                    <textarea
+                        id="description"
+                        name="description"
+                        rows="3"
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+                    ></textarea>
+                </div>
+                <button
+                    type="submit"
+                    class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+                >
+                    Submit Proposal
+                </button>
+            </form>
+
+            <div class="text-center mt-6 space-x-4">
+                <a
+                    href="/worlds/{{ world_name }}"
+                    class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
+                >
+                    Back to World Page
+                </a>
+                <a
+                    href="/"
+                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                >
+                    Back to Home
+                </a>
+            </div>
         </div>
         <script src="/static/localize_time.js"></script>
     </body>
