@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{{ world.name }} - HuntMaster</title>
+        <title>World: {{ world.name }} - HuntMaster</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link
             href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
@@ -14,238 +14,401 @@
                 font-family: "Inter", sans-serif;
                 background-color: #1c1c1c; /* eerie-black */
             }
-            .container {
-                max-width: 900px;
-            }
-            /* Added for hidden state during search */
-            .hidden-spawn {
-                display: none !important;
-            }
         </style>
         <script>
             tailwind.config = {
                 theme: {
                     extend: {
                         colors: {
-                            coyote: "#866533",
-                            "reseda-green": "#5c6c4b",
-                            "caput-mortuum": "#6a2824",
-                            "blue-green": "#28a1cc",
-                            "eerie-black": "#1c1c1c",
+                            'coyote': '#866533',
+                            'reseda-green': '#5c6c4b',
+                            'caput-mortuum': '#6a2824',
+                            'blue-green': '#28a1cc',
+                            'eerie-black': '#1c1c1c',
                         },
                         fontFamily: {
-                            inter: ["Inter", "sans-serif"],
+                            inter: ['Inter', 'sans-serif'],
                         },
-                    },
-                },
-            };
+                    }
+                }
+            }
+
+            // Asynchronous function to handle sponsorship
+            async function sponsorProposal(proposalId, worldName) {
+                // Check if user is logged in
+                if (!{{ logged_in_user_id | default('null') }}) {
+                    showMessage("You must be logged in to sponsor a proposal.", 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/worlds/${worldName}/sponsor`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest' // Identify as AJAX request
+                        },
+                        body: `proposal_id=${proposalId}`
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        showMessage(`Sponsorship successful for proposal ID: ${data.proposal_id}. Status: ${data.message}`, 'success');
+
+                        // Update UI for the sponsored proposal
+                        const sponsorIcon = document.getElementById(`sponsor-icon-${proposalId}`);
+                        const sponsorButton = document.getElementById(`sponsor-btn-${proposalId}`);
+                        if (sponsorIcon) {
+                            sponsorIcon.innerHTML = `
+                                <svg class="w-4 h-4 text-blue-green" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                            `; // Change to filled lightning bolt
+                        }
+                        if (sponsorButton) {
+                            sponsorButton.disabled = true;
+                            sponsorButton.classList.remove('bg-blue-green', 'hover:bg-blue-700');
+                            sponsorButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+                        }
+
+                    } else {
+                        const errorData = await response.json();
+                        showMessage(`Error: ${errorData.detail || 'Could not sponsor proposal.'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    showMessage('Network error or server unreachable.', 'error');
+                }
+            }
+
+            // Asynchronous function to handle toggling favorite spawns
+            async function toggleFavorite(spawnName, worldName) {
+                if (!{{ logged_in_user_id | default('null') }}) {
+                    showMessage("You must be logged in to favorite a spawn.", 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/worlds/${worldName}/spawns/${spawnName}/favourite`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest' // Identify as AJAX request
+                        },
+                        body: '' // No specific data needed in the body for toggle
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        showMessage(`${data.message}`, 'success');
+
+                        // Update UI for the favorited spawn
+                        const favoriteIcon = document.getElementById(`favorite-icon-${spawnName}`);
+                        // This is a placeholder for now. In a real scenario, the backend
+                        // would tell us if it was favorited or unfavorited.
+                        // For now, we'll just toggle the icon as if it was always successful.
+                        if (favoriteIcon) {
+                            const isCurrentlyFilled = favoriteIcon.innerHTML.includes('fill="currentColor"');
+                            if (isCurrentlyFilled) {
+                                // Change to outlined star
+                                favoriteIcon.innerHTML = `
+                                    <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
+                                    </svg>
+                                `;
+                            } else {
+                                // Change to filled star
+                                favoriteIcon.innerHTML = `
+                                    <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
+                                    </svg>
+                                `;
+                            }
+                        }
+
+                    } else {
+                        const errorData = await response.json();
+                        showMessage(`Error: ${errorData.detail || 'Could not toggle favorite.'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    showMessage('Network error or server unreachable.', 'error');
+                }
+            }
+
+            function showMessage(msg, type) {
+                const messageContainer = document.getElementById('message-container');
+                if (messageContainer) {
+                    // Clear any existing messages first
+                    messageContainer.innerHTML = '';
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white p-3 rounded-md mb-4 text-center`;
+                    messageDiv.textContent = msg;
+                    messageContainer.appendChild(messageDiv);
+
+                    // Clear message after a few seconds
+                    setTimeout(() => {
+                        messageContainer.innerHTML = '';
+                    }, 5000);
+                }
+            }
+
+            function filterSpawns() {
+                const searchText = document.getElementById('spawn-search').value.toLowerCase();
+                const levelFilter = parseInt(document.getElementById('level-filter').value);
+                const spawnList = document.getElementById('existing-spawn-list');
+                const spawns = spawnList.getElementsByTagName('li');
+
+                for (let i = 0; i < spawns.length; i++) {
+                    const spawn = spawns[i];
+                    const spawnName = spawn.querySelector('.spawn-name').textContent.toLowerCase();
+                    const spawnMinLevelText = spawn.querySelector('.spawn-min-level')?.textContent;
+                    const spawnMaxLevelText = spawn.querySelector('.spawn-max-level')?.textContent;
+
+                    let show = true;
+
+                    // Filter by name
+                    if (searchText && !spawnName.includes(searchText)) {
+                        show = false;
+                    }
+
+                    // Filter by level (only if levelFilter is a valid number)
+                    if (!isNaN(levelFilter)) {
+                        const minLevel = parseInt(spawnMinLevelText);
+                        const maxLevel = parseInt(spawnMaxLevelText);
+
+                        // If level is outside the range, hide it.
+                        if (levelFilter < minLevel || levelFilter > maxLevel) {
+                            show = false;
+                        }
+                    }
+
+                    spawn.style.display = show ? '' : 'none';
+                }
+            }
         </script>
     </head>
     <body
-        class="flex flex-col items-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
+        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
     >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full container my-8">
-            <div class="flex justify-between items-center mb-6">
-                <h1 class="text-4xl font-bold text-white">{{ world.name }}</h1>
-                {# Propose New Spawn button moved to bottom #}
-            </div>
-
-            <p class="text-lg text-gray-300 mb-4">
-                Location:
-                <span class="font-semibold">{{ world.location or 'N/A' }}</span>
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-4xl">
+            <h1 class="text-3xl font-bold text-white mb-4">
+                World: <span class="text-blue-green">{{ world.name }}</span>
+            </h1>
+            <p class="text-lg text-gray-300 mb-6">
+                Location: {{ world.location }}
             </p>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold text-white mb-2">
-                        Character Statistics
-                    </h3>
-                    <p class="text-gray-300">
-                        Unique Users with Characters:
-                        <span class="font-bold text-blue-green"
-                            >{{ unique_users_count }}</span
-                        >
-                    </p>
-                    <p class="text-gray-300">
-                        Total Characters in World:
-                        <span class="font-bold text-blue-green"
-                            >{{ total_characters_count }}</span
-                        >
-                    </p>
+            <div id="message-container">
+                {# Messages from FastAPI (e.g., redirect flash messages) #} {%
+                if message %}
+                <div
+                    class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+                >
+                    {{ message }}
                 </div>
-                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold text-white mb-2">
-                        World Description
-                    </h3>
-                    <p class="text-gray-300">
-                        A vibrant world where adventurers seek glory and
-                        valuable spawns. Collaboration is key!
-                    </p>
+                {% endif %} {% if error %}
+                <div
+                    class="bg-red-500 text-white p-3 rounded-md mb-4 text-center"
+                >
+                    {{ error }}
                 </div>
+                {% endif %}
             </div>
 
-            <h2 class="text-3xl font-bold text-white mb-4">
-                Spawns in {{ world.name }}
+            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
+                Statistics
             </h2>
+            <div class="bg-gray-700 p-4 rounded-md mb-6">
+                <p>Unique Users: {{ unique_users_count }}</p>
+                <p>Total Characters: {{ total_characters_count }}</p>
+            </div>
 
-            <div class="mb-6">
+            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
+                Proposals
+            </h2>
+            <div
+                class="bg-gray-700 p-4 rounded-md mb-6 max-h-60 overflow-y-auto"
+            >
+                {% if pending_spawn_proposals %}
+                <ul class="space-y-3">
+                    {% for proposal in pending_spawn_proposals %}
+                    <li
+                        class="flex items-center justify-between p-2 bg-gray-600 rounded-md"
+                    >
+                        <div>
+                            <p class="font-semibold text-white">
+                                {{ proposal.name }}
+                            </p>
+                            <p class="text-sm text-gray-300">
+                                {{ proposal.description if proposal.description
+                                else 'No description' }}
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                Levels: {{ proposal.min_level }} - {{
+                                proposal.max_level }}
+                            </p>
+                        </div>
+                        {% if logged_in_user_id %}
+                        <button
+                            id="sponsor-btn-{{ proposal.id }}"
+                            onclick="sponsorProposal({{ proposal.id }}, '{{ world.name }}')"
+                            class="bg-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm transition duration-300 flex items-center justify-center"
+                        >
+                            <span id="sponsor-icon-{{ proposal.id }}">
+                                {% if proposal.id in sponsored_proposal_ids %}
+                                <svg
+                                    class="w-4 h-4 text-blue-green"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                >
+                                    <path d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                                {% else %}
+                                <svg
+                                    class="w-4 h-4 text-blue-green"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    ></path>
+                                </svg>
+                                {% endif %}
+                            </span>
+                            <span class="text-blue-green"
+                                >{{ proposal.num_sponsors }}</span
+                            >
+                        </button>
+                        {% else %} {# No button if not logged in #} {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-gray-300">
+                    No pending spawn proposals for this world.
+                </p>
+                {% endif %}
+            </div>
+            <a
+                href="/worlds/{{ world.name }}/propose"
+                class="text-center inline-block mt-4 bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+            >
+                Propose New Spawn
+            </a>
+            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
+                Spawns
+            </h2>
+            <div class="mb-4">
                 <input
                     type="text"
-                    id="spawnSearch"
-                    placeholder="Search for spawns..."
+                    id="spawn-search"
+                    onkeyup="filterSpawns()"
+                    placeholder="Search spawn by name..."
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400 mb-2"
+                />
+                <input
+                    type="number"
+                    id="level-filter"
+                    onkeyup="filterSpawns()"
+                    placeholder="Filter by character level..."
                     class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
                 />
+                <p class="text-gray-400 text-xs mt-1">
+                    Enter your character's level to see relevant spawns. (Note:
+                    A dropdown with your characters' levels can be added later.)
+                </p>
             </div>
-
-            {% if spawns %}
-            <div
-                id="spawnList"
-                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-                {% for spawn in spawns %}
-                <div
-                    class="spawn-card bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 hover:border-blue-green transition duration-200 ease-in-out"
-                    data-spawn-name="{{ spawn.name }}"
-                    data-spawn-description="{{ spawn.description }}"
-                >
-                    <h3 class="text-xl font-semibold text-white mb-2">
-                        {{ spawn.name }}
-                    </h3>
-                    <p class="text-gray-400 text-sm mb-3">
-                        {{ spawn.description or 'No description available.' }}
-                    </p>
-                    <ul class="text-sm text-gray-300 space-y-1">
-                        <li>
-                            Locking Period:
-                            <span class="font-medium"
-                                >{{ spawn.locking_period }} mins</span
+            <div class="bg-gray-700 p-4 rounded-md mb-6">
+                {% if spawns %}
+                <ul class="space-y-3" id="existing-spawn-list">
+                    {% for spawn in spawns %}
+                    <li
+                        class="flex items-center justify-between p-2 bg-gray-600 rounded-md"
+                    >
+                        <div class="flex items-center">
+                            {% if logged_in_user_id %}
+                            <button
+                                onclick="toggleFavorite('{{ spawn.name }}', '{{ world.name }}')"
+                                class="mr-2"
                             >
-                        </li>
-                        <li>
-                            Claim Time Min:
-                            <span class="font-medium"
-                                >{{ spawn.claim_time_min }} mins</span
+                                <span id="favorite-icon-{{ spawn.name }}">
+                                    {# For now, always an outlined star as
+                                    favorited_spawn_ids is empty #} {% if
+                                    spawn.id in favorited_spawn_ids %}
+                                    <svg
+                                        class="w-5 h-5 text-yellow-400"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                        <path
+                                            d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"
+                                        ></path>
+                                    </svg>
+                                    {% else %}
+                                    <svg
+                                        class="w-5 h-5 text-grey-400"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                        <path
+                                            d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"
+                                        ></path>
+                                    </svg>
+                                    {% endif %}
+                                </span>
+                            </button>
+                            {% endif %}
+                            <span class="font-semibold text-white spawn-name"
+                                >{{ spawn.name }}</span
                             >
-                        </li>
-                        <li>
-                            Claim Time Max:
-                            <span class="font-medium"
-                                >{{ spawn.claim_time_max }} mins</span
+                            <span class="text-xs text-gray-400 ml-2"
+                                >(Levels:
+                                <span class="spawn-min-level"
+                                    >{{ spawn.min_level }}</span
+                                >
+                                -
+                                <span class="spawn-max-level"
+                                    >{{ spawn.max_level }}</span
+                                >)</span
                             >
-                        </li>
-                    </ul>
-                    <div class="mt-4 text-right">
+                        </div>
                         <a
                             href="/worlds/{{ world.name }}/spawns/{{ spawn.name }}"
-                            class="text-blue-green hover:underline text-sm font-medium"
-                            >View Details &rarr;</a
+                            class="bg-blue-green hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm transition duration-300"
+                            >View Details</a
                         >
-                    </div>
-                </div>
-                {% endfor %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-gray-300">No existing spawns for this world.</p>
+                {% endif %}
             </div>
-            <p
-                id="noSpawnsFound"
-                class="text-gray-400 text-center text-lg mt-6 hidden"
-            >
-                No spawns found matching your search. Consider proposing one!
-            </p>
-            {% else %}
-            <p id="noSpawnsYet" class="text-gray-400 text-center text-lg">
-                No spawns have been added to this world yet. Be the first to
-                propose one!
-            </p>
-            {% endif %}
 
-            <div class="text-center mt-8">
+            <div class="text-center mt-6 space-x-4">
                 <a
-                    href="/worlds/{{ world.name }}/propose"
-                    class="bg-blue-green hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300 text-lg"
+                    href="/dashboard"
+                    class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
                 >
-                    Propose New Spawn
+                    Back to Dashboard
+                </a>
+                <a
+                    href="/"
+                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                >
+                    Back to Home
                 </a>
             </div>
         </div>
-
-        {# Link to the external JavaScript file for time localization #}
         <script src="/static/localize_time.js"></script>
-
-        <script>
-            document.addEventListener("DOMContentLoaded", () => {
-                const searchInput = document.getElementById("spawnSearch");
-                const spawnCardsContainer =
-                    document.getElementById("spawnList");
-                const spawnCards = spawnCardsContainer
-                    ? Array.from(
-                          spawnCardsContainer.querySelectorAll(".spawn-card"),
-                      )
-                    : [];
-                const noSpawnsFoundMessage =
-                    document.getElementById("noSpawnsFound");
-                const noSpawnsYetMessage =
-                    document.getElementById("noSpawnsYet"); // The initial "no spawns" message
-
-                // Initially hide the "no spawns found" message if there are spawns
-                if (noSpawnsFoundMessage) {
-                    noSpawnsFoundMessage.classList.add("hidden");
-                }
-
-                // Hide the initial "no spawns yet" message if there are spawns and a search bar exists
-                if (spawnCards.length > 0 && noSpawnsYetMessage) {
-                    noSpawnsYetMessage.classList.add("hidden");
-                }
-
-                if (searchInput) {
-                    searchInput.addEventListener("input", () => {
-                        const searchTerm = searchInput.value
-                            .toLowerCase()
-                            .trim();
-                        let matchesFound = 0;
-
-                        spawnCards.forEach((card) => {
-                            const spawnName = card
-                                .getAttribute("data-spawn-name")
-                                .toLowerCase();
-                            const spawnDescription = card
-                                .getAttribute("data-spawn-description")
-                                .toLowerCase();
-
-                            if (
-                                spawnName.includes(searchTerm) ||
-                                spawnDescription.includes(searchTerm)
-                            ) {
-                                card.classList.remove("hidden-spawn");
-                                matchesFound++;
-                            } else {
-                                card.classList.add("hidden-spawn");
-                            }
-                        });
-
-                        // Show/hide "no spawns found" message based on search results
-                        if (noSpawnsFoundMessage) {
-                            if (matchesFound === 0 && searchTerm.length > 0) {
-                                noSpawnsFoundMessage.classList.remove("hidden");
-                            } else {
-                                noSpawnsFoundMessage.classList.add("hidden");
-                            }
-                        }
-
-                        // If there were no spawns initially, and a search is performed that yields no results,
-                        // keep the "no spawns yet" message hidden and rely on "no spawns found".
-                        // If the search bar is cleared and there were no spawns initially, the original message should reappear.
-                        if (noSpawnsYetMessage) {
-                            if (
-                                searchTerm.length === 0 &&
-                                spawnCards.length === 0
-                            ) {
-                                noSpawnsYetMessage.classList.remove("hidden");
-                            } else {
-                                noSpawnsYetMessage.classList.add("hidden");
-                            }
-                        }
-                    });
-                }
-            });
-        </script>
     </body>
 </html>

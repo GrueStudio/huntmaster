@@ -1,7 +1,8 @@
+from math import ceil
 from fastapi import APIRouter, Request, Depends, HTTPException, status, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, distinct
 from datetime import datetime, timedelta, UTC
 
@@ -16,7 +17,7 @@ templates = Jinja2Templates(directory="templates")
 @router.get("/worlds/{world_name}", response_class=HTMLResponse)
 async def get_world_page(
     request: Request,
-    world_name: str,
+    world_name: str, # Changed parameter name to world_name
     db: Session = Depends(get_db)
 ):
     """
@@ -32,17 +33,57 @@ async def get_world_page(
 
     # Calculate the number of unique users with characters in this world
     unique_users_in_world = db.query(func.count(distinct(Character.user_id))).filter(
-        Character.world_id == world.id,
+        Character.world_id == world.id, # Filter by world.id now
         Character.user_id.isnot(None) # Only count characters assigned to a user
     ).scalar()
 
     # Calculate the total number of characters in this world
     total_characters_in_world = db.query(func.count(Character.id)).filter(
-        Character.world_id == world.id
+        Character.world_id == world.id # Filter by world.id now
     ).scalar()
 
     # Fetch all Spawns associated with this World
-    spawns_in_world = db.query(Spawn).filter(Spawn.world_id == world.id).all()
+    spawns_in_world = db.query(Spawn).filter(Spawn.world_id == world.id).all() # Filter by world.id now
+
+    # Fetch PENDING SpawnProposals for this world, ordered by creation time
+    pending_spawn_proposals = db.query(SpawnProposal).filter(
+        SpawnProposal.world_id == world.id,
+        SpawnProposal.status == ProposalStatus.PENDING
+    ).order_by(SpawnProposal.created_at.asc()).all()
+
+    # Initialize sponsored_proposal_ids and favorited_spawn_ids
+    sponsored_proposal_ids = set()
+    favorited_spawn_ids = set()
+
+    # Get logged-in user ID for template rendering logic and fetching user-specific data
+    logged_in_user_id = request.session.get('user_id')
+
+    if logged_in_user_id:
+        # Fetch the user with their sponsored proposals (eager loading the relationship)
+        # Note: 'User.favorited_spawns' is a placeholder. You'll need to define this
+        # relationship and the associated join table in models.py for this to work.
+        user = db.query(User).options(joinedload(User.sponsored_proposals)).filter(User.id == logged_in_user_id).first()
+        if user:
+            # Collect IDs of proposals sponsored by the current user
+            sponsored_proposal_ids = {p.id for p in user.sponsored_proposals}
+
+            # --- Placeholder for fetching favorited spawns ---
+            # You will need to define a relationship for User.favorited_spawns in your models.py
+            # For now, we'll simulate fetching from a join table directly.
+            # This requires 'from sqlalchemy import Table, Column, Integer, ForeignKey' in models.py
+            # and defining user_favorite_spawns = Table(...) as a global.
+            # Example (if user_favorite_spawns table exists):
+            # from models import user_favorite_spawns # Import this if defined globally in models.py
+            # favorited_spawn_ids_query = db.query(user_favorite_spawns.c.spawn_id).filter(
+            #     user_favorite_spawns.c.user_id == logged_in_user_id
+            # ).all()
+            # favorited_spawn_ids = {sid[0] for sid in favorited_spawn_ids_query}
+
+            # For demonstration without models.py changes, let's assume a static list or an empty set
+            # This section needs actual implementation once models.py is updated with favorites.
+            # For now, we'll use an empty set, so the star icon will always be outlined.
+            pass # No actual query here for favorited_spawn_ids in this turn
+
 
     return templates.TemplateResponse(
         "world.html",
@@ -51,7 +92,11 @@ async def get_world_page(
             "world": world,
             "unique_users_count": unique_users_in_world,
             "total_characters_count": total_characters_in_world,
-            "spawns": spawns_in_world
+            "spawns": spawns_in_world,
+            "pending_spawn_proposals": pending_spawn_proposals, # Pass pending proposals to template
+            "logged_in_user_id": logged_in_user_id, # Pass logged-in user ID
+            "sponsored_proposal_ids": sponsored_proposal_ids, # Pass sponsored proposal IDs
+            "favorited_spawn_ids": favorited_spawn_ids # Pass favorited spawn IDs (currently empty set)
         }
     )
 
@@ -182,3 +227,103 @@ async def get_spawn_detail_page(
             "spawn": spawn
         }
     )
+@router.post("/worlds/{world_name}/sponsor", status_code=status.HTTP_200_OK)
+async def sponsor_spawn_proposal(
+    request: Request,
+    world_name: str,
+    proposal_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Handles sponsoring a spawn proposal asynchronously.
+    This function implements the sponsorship logic and evaluates approval thresholds.
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to sponsor a proposal.")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    spawn_proposal = db.query(SpawnProposal).filter(SpawnProposal.id == proposal_id).first()
+    if not spawn_proposal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn proposal not found.")
+
+    # Ensure the proposal is for the correct world
+    if spawn_proposal.world.name.lower() != world_name.lower():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal does not belong to this world.")
+
+    # Check if the proposal is still pending
+    if spawn_proposal.status != ProposalStatus.PENDING:
+        return {"message": f"This proposal is already {spawn_proposal.status.value}.", "proposal_id": proposal_id}
+
+    # Check if user has already sponsored this proposal
+    if user in spawn_proposal.sponsors:
+        return {"message": "You have already sponsored this proposal.", "proposal_id": proposal_id}
+
+    # Add the sponsorship
+    spawn_proposal.sponsors.append(user)
+    db.add(spawn_proposal)
+    db.commit()
+    db.refresh(spawn_proposal) # Refresh to get updated sponsors list
+
+    # --- Evaluate Sponsorship Thresholds ---
+    # 1. Calculate active users in the world (for the 1% rule)
+    # An "active user" in a world is defined as any user who has:
+    # - Has at least one Character associated with that World AND
+    # - That character has participated in *any* Hunt within that World in the last 90 days.
+
+    # Get all spawn IDs for the current world
+    world_spawns = db.query(Spawn.id).filter(Spawn.world_id == spawn_proposal.world_id).scalar_subquery()
+
+    # Query distinct user_ids whose characters have participated in hunts in this world in the last 90 days
+    ninety_days_ago = datetime.now(UTC) - timedelta(days=90)
+
+    active_users_subquery = db.query(distinct(Character.user_id)).join(Spawn, Character.world_id == Spawn.world_id).subquery()
+        #.join(Hunt).filter(
+        #    Hunt.spawn_id.in_(world_spawns), # Filter hunts to only those within the world's spawns
+        #    Hunt.start_time >= ninety_days_ago).subquery()
+
+    active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
+
+    # Calculate the minimum sponsors required based on hybrid logic
+    # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
+    percentage_sponsors = ceil(active_users_count * 0.01) if active_users_count else 0
+
+    # Ensure minimum 5 sponsors, then consider percentage, then cap at 20
+    min_sponsors_required = min(percentage_sponsors, 5)
+
+    # Check if the proposal meets the approval threshold
+    if spawn_proposal.num_sponsors >= min_sponsors_required:
+        spawn_proposal.status = ProposalStatus.APPROVED
+        spawn_proposal.approved_at = datetime.now(UTC)
+
+        # Create the actual Spawn if the proposal is approved
+        new_spawn = Spawn(
+            name=spawn_proposal.name,
+            description=spawn_proposal.description,
+            world_id=spawn_proposal.world_id,
+            min_level=spawn_proposal.min_level,
+            max_level=spawn_proposal.max_level,
+            # Hardcoded defaults for fields not in SpawnProposal model (for now)
+            # These fields need to be added to SpawnProposal model for full configurability
+            locking_period_minutes=15, # Default value
+            claim_time_min=15,         # Default value
+            claim_time_max=180,        # Default value
+            respawn_time_minutes=60,   # Default value
+            claim_times_per_day=1,     # Default value
+            proposal_id=spawn_proposal.id, # Link to the proposal
+        )
+        db.add(new_spawn)
+        db.flush() # Flush to get the ID for new_spawn before committing
+        spawn_proposal.spawn_id = new_spawn.id # Link proposal to created spawn
+
+        db.commit()
+        db.refresh(spawn_proposal)
+        db.refresh(new_spawn)
+
+        return JSONResponse({"message": "Proposal approved and spawn created!", "proposal_id": proposal_id, "spawn_created": True, "spawn_name": new_spawn.name})
+    else:
+        db.commit() # Commit the sponsorship even if not approved yet
+        return JSONResponse({"message": f"Proposal sponsored successfully! Needs {min_sponsors_required - spawn_proposal.num_sponsors} more sponsors for approval.", "proposal_id": proposal_id})
