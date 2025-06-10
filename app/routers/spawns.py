@@ -81,13 +81,19 @@ async def get_propose_spawn_form(
 async def post_propose_spawn(
     request: Request,
     world_name: str,
-    spawn_name: str = Form(..., alias="name"), # Get 'name' from form data
-    spawn_description: str = Form(None, alias="description"), # Get 'description' from form data
+    spawn_name: str = Form(..., alias="name"),
+    spawn_description: str = Form(None, alias="description"),
+    min_level: int = Form(..., alias="min_level"),
+    max_level: int = Form(..., alias="max_level"),
+    # Note: respawn_time_minutes, locking_period_minutes, deprioratization_time
+    # are removed from this function's parameters to align with the SpawnProposal model
+    # as they were not part of the previous version of the model.
     db: Session = Depends(get_db)
 ):
     """
     Handles the submission of a new spawn proposal.
-    Creates an APPROVED SpawnProposal and a new Spawn.
+    Creates a PENDING SpawnProposal. The Spawn creation will happen only after
+    the proposal is approved via the sponsorship mechanism.
     """
     # Check if user is logged in
     username = request.session.get('username')
@@ -104,7 +110,7 @@ async def post_propose_spawn(
     if not world:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found.")
 
-    # Check if a spawn with this name already exists in this world
+    # Check if a spawn with this name already exists in this world (case-insensitive)
     existing_spawn = db.query(Spawn).filter(
         func.lower(Spawn.name) == spawn_name.lower(),
         Spawn.world_id == world.id
@@ -116,55 +122,32 @@ async def post_propose_spawn(
                 "request": request,
                 "world_name": world_name,
                 "error": f"A spawn named '{spawn_name}' already exists in {world.name}.",
-                "message": "Please try a different name."
+                "message": "Please try a different name.",
+                # Retain form values to pre-fill the form on error, for better UX
+                "name": spawn_name,
+                "description": spawn_description,
+                "min_level": min_level,
+                "max_level": max_level
             }
         )
 
-    # Create the SpawnProposal in APPROVED state
+    # Create the SpawnProposal in PENDING state
     new_proposal = SpawnProposal(
         name=spawn_name,
         description=spawn_description,
         world_id=world.id,
-        min_level=1, # Default values
-        max_level=1000, # Default values
-        status=ProposalStatus.APPROVED, # Set to APPROVED state
+        min_level=min_level,
+        max_level=max_level,
+        status=ProposalStatus.PENDING, # Set to PENDING state
         created_at=datetime.now(UTC),
-        approved_at=datetime.now(UTC), # Set approved_at since it's approved
+        # approved_at will be set only if/when the proposal is approved
     )
 
     db.add(new_proposal)
-    db.flush() # Flush to get the ID for new_proposal before creating Spawn
-
-    # Create the actual Spawn
-    new_spawn = Spawn(
-        name=spawn_name,
-        description=spawn_description,
-        world_id=world.id,
-        locking_period=15, # 15 minutes
-        claim_time_min=15, # 15 minutes
-        claim_time_max=180, # 3 hours (180 minutes)
-        proposal_id=new_proposal.id, # Link to the proposal
-    )
-
-    db.add(new_spawn)
-    db.flush() # Flush to ensure new_spawn gets its ID
-
-    # Link the SpawnProposal to the newly created Spawn
-    new_proposal.spawn_id = new_spawn.id
-
     db.commit()
     db.refresh(new_proposal)
-    db.refresh(new_spawn)
 
-    return templates.TemplateResponse(
-        "propose_spawn.html",
-        {
-            "request": request,
-            "world_name": world_name,
-            "success": f"Spawn '{spawn_name}' in {world.name} has been successfully proposed and approved!",
-            "message": "You can now view it in the world's spawn list."
-        }
-    )
+    return RedirectResponse(url=f"/worlds/{world.name}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/worlds/{world_name}/spawns/{spawn_name}", response_class=HTMLResponse) # Updated route

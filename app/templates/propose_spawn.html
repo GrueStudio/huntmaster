@@ -37,7 +37,7 @@
     <body
         class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
     >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg">
             <h1 class="text-3xl font-bold text-white mb-4">
                 Propose a New Spawn for
                 <span class="text-blue-green">{{ world_name }}</span>
@@ -89,6 +89,115 @@
                         class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
                     ></textarea>
                 </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label
+                            for="min_level"
+                            class="block text-gray-300 text-sm font-medium mb-1"
+                            >Minimum Level</label
+                        >
+                        <input
+                            type="number"
+                            id="min_level"
+                            name="min_level"
+                            required
+                            value="1"
+                            min="1"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                        />
+                    </div>
+                    <div>
+                        <label
+                            for="max_level"
+                            class="block text-gray-300 text-sm font-medium mb-1"
+                            >Maximum Level</label
+                        >
+                        <input
+                            type="number"
+                            id="max_level"
+                            name="max_level"
+                            required
+                            value="1000"
+                            min="1"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                        />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label
+                            for="min_claim_time"
+                            class="block text-gray-300 text-sm font-medium mb-1"
+                            >Minimum Claim Time (minutes)</label
+                        >
+                        <input
+                            type="number"
+                            id="min_claim_time"
+                            name="min_claim_time"
+                            required
+                            value="15"
+                            min="1"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                        />
+                    </div>
+                    <div>
+                        <label
+                            for="max_claim_time"
+                            class="block text-gray-300 text-sm font-medium mb-1"
+                            >Maximum Claim Time (minutes)</label
+                        >
+                        <input
+                            type="number"
+                            id="max_claim_time"
+                            name="max_claim_time"
+                            required
+                            value="180"
+                            min="1"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label
+                        for="locking_period_minutes"
+                        class="block text-gray-300 text-sm font-medium mb-1"
+                        >Locking Period (minutes)</label
+                    >
+                    <input
+                        type="number"
+                        id="locking_period_minutes"
+                        name="locking_period_minutes"
+                        required
+                        value="15"
+                        min="0"
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                    />
+                </div>
+
+                <div>
+                    <label
+                        for="deprioratization_time"
+                        class="block text-gray-300 text-sm font-medium mb-1"
+                        >De-prioritization Time (minutes)</label
+                    >
+                    <p class="text-gray-400 text-xs mb-2">
+                        This is the maximum time a user can hunt in this spawn
+                        per day before their bids are de-prioritized.
+                    </p>
+                    <input
+                        type="number"
+                        id="deprioratization_time"
+                        name="deprioratization_time"
+                        required
+                        value="180"
+                        min="0"
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                    />
+                </div>
+
                 <button
                     type="submit"
                     class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
