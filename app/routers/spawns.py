@@ -9,6 +9,9 @@ from datetime import datetime, timedelta, UTC
 from database import get_db
 from models import World, Character, Spawn, SpawnProposal, ProposalStatus, User # Import necessary models and enums
 
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Configure Jinja2Templates (assuming templates directory is relative to app root or defined globally in main.py)
@@ -51,6 +54,25 @@ async def get_world_page(
         SpawnProposal.status == ProposalStatus.PENDING
     ).order_by(SpawnProposal.created_at.asc()).all()
 
+
+    # Get all spawn IDs for the current world
+    world_spawns = db.query(Spawn.id).filter(Spawn.world_id == world.id).scalar_subquery()
+
+    # Query distinct user_ids whose characters have participated in hunts in this world in the last 90 days
+    ninety_days_ago = datetime.now(UTC) - timedelta(days=90)
+
+    active_users_subquery = db.query(distinct(Character.user_id)).join(Spawn, Character.world_id == Spawn.world_id).subquery()
+        #.join(Hunt).filter(
+        #    Hunt.spawn_id.in_(world_spawns), # Filter hunts to only those within the world's spawns
+        #    Hunt.start_time >= ninety_days_ago).subquery()
+
+    active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
+
+    # Calculate min_sponsors_required once for the page
+    # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
+    percentage_sponsors = round(active_users_count * 0.01) if active_users_count else 0
+    min_sponsors_required = min(5, percentage_sponsors)
+
     # Initialize sponsored_proposal_ids and favorited_spawn_ids
     sponsored_proposal_ids = set()
     favorited_spawn_ids = set()
@@ -92,6 +114,7 @@ async def get_world_page(
             "world": world,
             "unique_users_count": unique_users_in_world,
             "total_characters_count": total_characters_in_world,
+            "min_sponsors_required": min_sponsors_required,
             "spawns": spawns_in_world,
             "pending_spawn_proposals": pending_spawn_proposals, # Pass pending proposals to template
             "logged_in_user_id": logged_in_user_id, # Pass logged-in user ID
@@ -286,7 +309,7 @@ async def sponsor_spawn_proposal(
         #    Hunt.start_time >= ninety_days_ago).subquery()
 
     active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
-
+    logger.
     # Calculate the minimum sponsors required based on hybrid logic
     # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
     percentage_sponsors = ceil(active_users_count * 0.01) if active_users_count else 0
@@ -323,7 +346,18 @@ async def sponsor_spawn_proposal(
         db.refresh(spawn_proposal)
         db.refresh(new_spawn)
 
-        return JSONResponse({"message": "Proposal approved and spawn created!", "proposal_id": proposal_id, "spawn_created": True, "spawn_name": new_spawn.name})
+        return JSONResponse({
+            "message": "Proposal approved and spawn created!",
+            "proposal_id": proposal_id,
+            "spawn_created": True,
+            "spawn_details": {
+                "id": new_spawn.id,
+                "name": new_spawn.name,
+                "description": new_spawn.description,
+                "min_level": new_spawn.min_level,
+                "max_level": new_spawn.max_level
+            }
+        })
     else:
         db.commit() # Commit the sponsorship even if not approved yet
         return JSONResponse({"message": f"Proposal sponsored successfully! Needs {min_sponsors_required - spawn_proposal.num_sponsors} more sponsors for approval.", "proposal_id": proposal_id})

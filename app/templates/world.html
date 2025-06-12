@@ -53,22 +53,46 @@
 
                     if (response.ok) {
                         const data = await response.json();
-                        showMessage(`Sponsorship successful for proposal ID: ${data.proposal_id}. Status: ${data.message}`, 'success');
+                        showMessage(`${data.message}`, 'success');
 
                         // Update UI for the sponsored proposal
+                        const proposalListItem = document.getElementById(`proposal-item-${proposalId}`);
                         const sponsorIcon = document.getElementById(`sponsor-icon-${proposalId}`);
                         const sponsorButton = document.getElementById(`sponsor-btn-${proposalId}`);
-                        if (sponsorIcon) {
-                            sponsorIcon.innerHTML = `
-                                <svg class="w-4 h-4 text-blue-green" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                </svg>
-                            `; // Change to filled lightning bolt
-                        }
-                        if (sponsorButton) {
-                            sponsorButton.disabled = true;
-                            sponsorButton.classList.remove('bg-blue-green', 'hover:bg-blue-700');
-                            sponsorButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+                        const sponsorCountSpan = document.getElementById(`sponsor-count-${proposalId}`);
+
+                        if (data.spawn_created) {
+                            // If proposal approved and spawn created
+                            if (proposalListItem) {
+                                proposalListItem.remove(); // Remove from proposals list
+                            }
+                            // Add to existing spawns list
+                            addSpawnToExistingSpawns(data.spawn_details, worldName);
+                        } else if (data.status === 'pending') {
+                            // If still pending, update count and disable if already sponsored
+                            if (sponsorCountSpan && data.num_sponsors && data.min_sponsors_required) {
+                                sponsorCountSpan.textContent = `${data.num_sponsors}/${data.min_sponsors_required}`;
+                            }
+                            if (sponsorIcon) {
+                                // Change to filled lightning bolt if user sponsored
+                                sponsorIcon.innerHTML = `
+                                    <svg class="w-4 h-4 text-blue-green" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                `;
+                            }
+                            if (sponsorButton) {
+                                sponsorButton.disabled = true;
+                                sponsorButton.classList.remove('bg-blue-green', 'hover:bg-blue-700');
+                                sponsorButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+                            }
+                        } else if (data.status === 'already_sponsored') {
+                            // If user already sponsored, just disable the button
+                            if (sponsorButton) {
+                                sponsorButton.disabled = true;
+                                sponsorButton.classList.remove('bg-blue-green', 'hover:bg-blue-700');
+                                sponsorButton.classList.add('bg-gray-500', 'cursor-not-allowed');
+                            }
                         }
 
                     } else {
@@ -80,6 +104,36 @@
                     showMessage('Network error or server unreachable.', 'error');
                 }
             }
+
+            // Function to dynamically add a new spawn to the existing spawns list
+            function addSpawnToExistingSpawns(spawn, worldName) {
+                const spawnList = document.getElementById('existing-spawn-list');
+                if (!spawnList) return;
+
+                const newSpawnHtml = `
+                    <li class="flex items-center justify-between p-2 bg-gray-600 rounded-md" id="spawn-item-${spawn.name}">
+                        <div class="flex items-center">
+                            {% if logged_in_user_id %}
+                            <button onclick="toggleFavorite('${spawn.name}', '${worldName}')" class="mr-2">
+                                <span id="favorite-icon-${spawn.name}">
+                                    <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
+                                    </svg>
+                                </span>
+                            </button>
+                            {% endif %}
+                            <span class="font-semibold text-white spawn-name">${spawn.name}</span>
+                            <span class="text-xs text-gray-400 ml-2">
+                                (Levels: <span class="spawn-min-level">${spawn.min_level}</span> - <span class="spawn-max-level">${spawn.max_level}</span>)
+                            </span>
+                        </div>
+                        <a href="/worlds/${worldName}/spawns/${spawn.name}" class="bg-blue-green hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm transition duration-300">View Details</a>
+                    </li>
+                `;
+                spawnList.insertAdjacentHTML('beforeend', newSpawnHtml);
+                filterSpawns(); // Re-apply filters after adding new spawn
+            }
+
 
             // Asynchronous function to handle toggling favorite spawns
             async function toggleFavorite(spawnName, worldName) {
@@ -110,14 +164,14 @@
                         if (favoriteIcon) {
                             const isCurrentlyFilled = favoriteIcon.innerHTML.includes('fill="currentColor"');
                             if (isCurrentlyFilled) {
-                                // Change to outlined star
+                                // Change to outlined star (gray for un-favorited state)
                                 favoriteIcon.innerHTML = `
-                                    <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
+                                    <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
                                     </svg>
                                 `;
                             } else {
-                                // Change to filled star
+                                // Change to filled star (yellow for favorited state)
                                 favoriteIcon.innerHTML = `
                                     <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
@@ -235,6 +289,7 @@
                     {% for proposal in pending_spawn_proposals %}
                     <li
                         class="flex items-center justify-between p-2 bg-gray-600 rounded-md"
+                        id="proposal-item-{{ proposal.id }}"
                     >
                         <div>
                             <p class="font-semibold text-white">
@@ -248,17 +303,37 @@
                                 Levels: {{ proposal.min_level }} - {{
                                 proposal.max_level }}
                             </p>
+                            <p class="text-xs text-gray-400">
+                                Sponsors:
+                                <span id="sponsor-count-{{ proposal.id }}"
+                                    >{{ proposal.num_sponsors }}/{{
+                                    min_sponsors_required }}</span
+                                >
+                            </p>
                         </div>
                         {% if logged_in_user_id %}
                         <button
                             id="sponsor-btn-{{ proposal.id }}"
                             onclick="sponsorProposal({{ proposal.id }}, '{{ world.name }}')"
-                            class="bg-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm transition duration-300 flex items-center justify-center"
+                            class="py-2 px-4 rounded-md text-sm transition duration-300 flex items-center justify-center {% if proposal.id in sponsored_proposal_ids %} bg-gray-500 cursor-not-allowed {% else %} bg-blue-green hover:bg-blue-700 {% endif %}"
+                            {%
+                            if
+                            proposal.id
+                            in
+                            sponsored_proposal_ids
+                            %}
+                            disabled
+                            {%
+                            endif
+                            %}
                         >
-                            <span id="sponsor-icon-{{ proposal.id }}">
+                            <span
+                                id="sponsor-icon-{{ proposal.id }}"
+                                class="mr-2"
+                            >
                                 {% if proposal.id in sponsored_proposal_ids %}
                                 <svg
-                                    class="w-4 h-4 text-blue-green"
+                                    class="w-4 h-4 text-white"
                                     fill="currentColor"
                                     viewBox="0 0 24 24"
                                     xmlns="http://www.w3.org/2000/svg"
@@ -267,7 +342,7 @@
                                 </svg>
                                 {% else %}
                                 <svg
-                                    class="w-4 h-4 text-blue-green"
+                                    class="w-4 h-4 text-white"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -282,11 +357,9 @@
                                 </svg>
                                 {% endif %}
                             </span>
-                            <span class="text-blue-green"
-                                >{{ proposal.num_sponsors }}</span
-                            >
+                            Sponsor
                         </button>
-                        {% else %} {# No button if not logged in #} {% endif %}
+                        {% endif %}
                     </li>
                     {% endfor %}
                 </ul>
