@@ -309,7 +309,7 @@ async def sponsor_spawn_proposal(
         #    Hunt.start_time >= ninety_days_ago).subquery()
 
     active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
-    logger.
+
     # Calculate the minimum sponsors required based on hybrid logic
     # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
     percentage_sponsors = ceil(active_users_count * 0.01) if active_users_count else 0
@@ -361,3 +361,40 @@ async def sponsor_spawn_proposal(
     else:
         db.commit() # Commit the sponsorship even if not approved yet
         return JSONResponse({"message": f"Proposal sponsored successfully! Needs {min_sponsors_required - spawn_proposal.num_sponsors} more sponsors for approval.", "proposal_id": proposal_id})
+
+@router.get("/worlds/{world_name}/spawns/{spawn_name}/propose", response_class=HTMLResponse)
+async def get_propose_spawn_change_form(
+    request: Request,
+    world_name: str,
+    spawn_name: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Displays the form for proposing changes to an existing spawn.
+    Dynamically populates current values and allows input for new ones.
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to propose changes.")
+
+    world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
+    if not world:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+
+    spawn = db.query(Spawn).filter(
+        func.lower(Spawn.name) == spawn_name.lower(),
+        Spawn.world_id == world.id
+    ).first()
+    if not spawn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world.")
+
+    return templates.TemplateResponse(
+        "propose_change.html",
+        {
+            "request": request,
+            "world": world, # Pass the world object instead of just the name
+            "spawn": spawn,
+            "message": None,
+            "error": None
+        }
+    )
