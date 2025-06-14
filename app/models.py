@@ -5,7 +5,7 @@ import enum
 from datetime import datetime, UTC
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric, event, Enum, Table
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func, select
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -292,7 +292,25 @@ class SpawnChangeProposal(Base):
     @hybrid_property
     def votes_for(self) -> int:
         """Calculates the total upvotes for this change proposal."""
-        return sum(1 for vote in self.voters if vote.vote_type == VoteType.UPVOTE) # Assuming VoteType is accessible on the association object
+        # This implementation queries the association table directly for the instance.
+        # It's less efficient than a single query with the expression, but works for hybrid properties.
+        # Ensure that self.id is available (i.e., object is persistent).
+        if self.id is None:
+            # If the object is not yet committed or not associated with a session,
+            # we can't query, so return 0. This might happen for new, unsaved objects.
+            return 0
+
+        return (
+            session.object_session(self).query(func.count(proposal_votes.c.user_id))
+            .filter(
+                proposal_votes.c.spawn_change_proposal_id == self.id,
+                proposal_votes.c.vote_type == VoteType.UPVOTE
+            )
+            .scalar() or 0
+        )
+    @property
+    def total_votes(self):
+        return self.votes_for + self.votes_against
 
     @votes_for.expression
     def votes_for_ex(cls):
@@ -306,7 +324,17 @@ class SpawnChangeProposal(Base):
     @hybrid_property
     def votes_against(self) -> int:
         """Calculates the total downvotes for this change proposal."""
-        return sum(1 for vote in self.voters if vote.vote_type == VoteType.DOWNVOTE)
+        if self.id is None or not session.object_session(self):
+            return 0
+
+        return (
+            session.object_session(self).query(func.count(proposal_votes.c.user_id))
+            .filter(
+                proposal_votes.c.spawn_change_proposal_id == self.id,
+                proposal_votes.c.vote_type == VoteType.DOWNVOTE
+            )
+            .scalar() or 0
+        )
 
     @votes_against.expression
     def votes_against_ex(cls):

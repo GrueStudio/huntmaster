@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{{ spawn.name }} - HuntMaster</title>
+        <title>Spawn Details: {{ spawn.name }} - HuntMaster</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link
             href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
@@ -14,11 +14,24 @@
                 font-family: "Inter", sans-serif;
                 background-color: #1c1c1c; /* eerie-black */
             }
-            .container {
-                max-width: 700px;
+            /* Custom scrollbar for pending proposals section */
+            .scroll-container::-webkit-scrollbar {
+                width: 8px;
+            }
+            .scroll-container::-webkit-scrollbar-track {
+                background: #2d3748; /* bg-gray-700 equivalent */
+                border-radius: 4px;
+            }
+            .scroll-container::-webkit-scrollbar-thumb {
+                background: #5c6c4b; /* reseda-green */
+                border-radius: 4px;
+            }
+            .scroll-container::-webkit-scrollbar-thumb:hover {
+                background: #6a805a; /* A slightly darker shade of reseda-green */
             }
         </style>
         <script>
+            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
             tailwind.config = {
                 theme: {
                     extend: {
@@ -38,92 +51,522 @@
         </script>
     </head>
     <body
-        class="flex flex-col items-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
+        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
     >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full container my-8">
-            <h1 class="text-4xl font-bold text-white mb-4">{{ spawn.name }}</h1>
-            <p class="text-lg text-gray-300 mb-6">
-                World:
-                <a
-                    href="/worlds/{{ world.name }}"
-                    class="text-blue-green hover:underline"
-                    >{{ world.name }}</a
-                >
-            </p>
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-2xl">
+            <h2 class="text-3xl font-bold text-center text-white mb-6">
+                Spawn Details:
+                <span class="text-blue-green">{{ spawn.name }}</span>
+            </h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold text-white mb-2">
-                        Description
-                    </h3>
-                    <p class="text-gray-300">
-                        {{ spawn.description or 'No description available.' }}
-                    </p>
-                </div>
-                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold text-white mb-2">
-                        Spawn Details
-                    </h3>
-                    <ul class="text-gray-300 space-y-2">
-                        <li>
-                            Locking Period:
-                            <span class="font-bold text-blue-green"
-                                >{{ spawn.locking_period }} mins</span
-                            >
-                        </li>
-                        <li>
-                            Claim Time Min:
-                            <span class="font-bold text-blue-green"
-                                >{{ spawn.claim_time_min }} mins</span
-                            >
-                        </li>
-                        <li>
-                            Claim Time Max:
-                            <span class="font-bold text-blue-green"
-                                >{{ spawn.claim_time_max }} mins</span
-                            >
-                        </li>
-                        {# Assuming min_level and max_level are now on Spawn
-                        directly due to Proposal #} {% if spawn.min_level and
-                        spawn.max_level %}
-                        <li>
-                            Recommended Level:
-                            <span class="font-bold text-blue-green"
-                                >{{ spawn.min_level }} - {{ spawn.max_level
-                                }}</span
-                            >
-                        </li>
+            <div class="space-y-4 text-gray-300">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    {# First Section: Spawn Details #}
+                    <div class="bg-gray-700 p-4 rounded-md">
+                        <h3 class="text-xl font-semibold text-white mb-4">
+                            Spawn Details
+                        </h3>
+                        <p>
+                            <strong>World:</strong> {{ spawn.world.name if
+                            spawn.world else 'N/A' }}
+                        </p>
+                        <p>
+                            <strong>Description:</strong> {{ spawn.description
+                            if spawn.description is not none else 'N/A' }}
+                        </p>
+                        <p>
+                            <strong>Recommended Level Range:</strong> {{
+                            spawn.min_level if spawn.min_level is not none else
+                            'N/A' }} - {{ spawn.max_level if spawn.max_level is
+                            not none else 'N/A' }}
+                        </p>
+                    </div>
+
+                    {# Second Section: Bid Settings #}
+                    <div class="bg-gray-700 p-4 rounded-md">
+                        <h3 class="text-xl font-semibold text-white mb-4">
+                            Bid Settings
+                        </h3>
+                        <p>
+                            <strong>Locking Period:</strong> {{
+                            spawn.locking_period }} minutes
+                        </p>
+                        <p>
+                            <strong>Claim Time Range:</strong> {{
+                            spawn.claim_time_min }} - {{ spawn.claim_time_max }}
+                            minutes
+                        </p>
+                        <p>
+                            <strong>Deprioritize Time:</strong> &infin; (Not yet
+                            implemented in model)
+                        </p>
+                        {# Infinity symbol #} {# Currently Applied Proposals -
+                        Moved inside Bid Settings #} {% if
+                        last_approved_permanent_proposal %}
+                        <div class="bg-gray-800 p-2 rounded-md mb-2 text-xs">
+                            <p class="font-semibold text-white text-xs">
+                                Permanent Change
+                            </p>
+                            <p class="text-gray-400">
+                                Locking: {{
+                                last_approved_permanent_proposal.new_locking_period
+                                }} min | Claim: {{
+                                last_approved_permanent_proposal.new_claim_time_min
+                                }} - {{
+                                last_approved_permanent_proposal.new_claim_time_max
+                                }} min
+                            </p>
+                            <p class="text-gray-500 flex items-center mt-1">
+                                <span class="mr-2">&#x1F44D;</span> {{
+                                last_approved_permanent_proposal.stats.favorability
+                                }}% Favorability &nbsp; &bull; &nbsp;
+                                <span class="mr-2">&#x1F465;</span> {{
+                                last_approved_permanent_proposal.stats.engagement
+                                }} Engagement
+                            </p>
+                        </div>
+                        {% endif %} {% if last_approved_temporary_proposal %}
+                        <div class="bg-gray-800 p-2 rounded-md mb-2 text-xs">
+                            <p class="font-semibold text-white text-xs">
+                                Temporary Change (in effect)
+                            </p>
+                            <p class="text-gray-400">
+                                Locking: {{
+                                last_approved_temporary_proposal.new_locking_period
+                                }} min | Claim: {{
+                                last_approved_temporary_proposal.new_claim_time_min
+                                }} - {{
+                                last_approved_temporary_proposal.new_claim_time_max
+                                }} min
+                            </p>
+                            <p class="text-gray-400">
+                                Active: {{
+                                last_approved_temporary_proposal.start_time |
+                                datetimeformat('%b %d, %H:%M') | safe }} - {{
+                                last_approved_temporary_proposal.end_time |
+                                datetimeformat('%b %d, %H:%M') | safe }}
+                            </p>
+                            <p class="text-gray-500 flex items-center mt-1">
+                                <span class="mr-2">&#x1F44D;</span> {{
+                                last_approved_temporary_proposal.stats.favorability
+                                }}% Favorability &nbsp; &bull; &nbsp;
+                                <span class="mr-2">&#x1F465;</span> {{
+                                last_approved_temporary_proposal.stats.engagement
+                                }} Engagement
+                            </p>
+                        </div>
                         {% endif %}
-                    </ul>
+                    </div>
+                </div>
+
+                {# Combined Proposal Section #}
+                <div class="my-8 border-t border-gray-600"></div>
+                {# A simple break line #} {# No title for the combined section
+                as requested #} {% if recently_rejected_proposals %}
+                <div class="bg-caput-mortuum p-4 rounded-md space-y-2 mb-6">
+                    <p
+                        class="font-semibold text-white text-center text-lg mb-2"
+                    >
+                        Recently Rejected Proposals (last 7 days)
+                    </p>
+                    {% for proposal in recently_rejected_proposals %}
+                    <div class="border-b border-gray-600 pb-2 last:border-b-0">
+                        <p class="font-semibold text-white">
+                            {{ proposal.name }}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            {% if proposal.status == 'rejected' %} Rejected: {%
+                            else %} Approved: {% endif %} {{
+                            proposal.approved_at | datetimeformat('%b %d, %Y') |
+                            safe}}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Proposed Locking: {{ proposal.new_locking_period }}
+                            min | Claim: {{ proposal.new_claim_time_min }} - {{
+                            proposal.new_claim_time_max }} min
+                        </p>
+                        {% if proposal.start_time and proposal.end_time %}
+                        <p class="text-sm text-gray-400">
+                            Temporary: {{ proposal.start_time |
+                            datetimeformat('%b %d, %H:%M') }} to {{
+                            proposal.end_time | datetimeformat('%b %d, %H:%M')
+                            }}
+                        </p>
+                        {% endif %}
+                        <p class="text-sm text-gray-500 flex items-center mt-1">
+                            <span class="mr-2 opacity-50">&#x1F44D;</span> {{
+                            proposal.stats.favorability }}% Favorability &nbsp;
+                            &bull; &nbsp;
+                            <span class="mr-2 opacity-50">&#x1F465;</span> {{
+                            proposal.stats.engagement }} Engagement
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-400 mb-6 text-center">
+                    No proposals approved or rejected in the last 7 days.
+                </p>
+                {% endif %}
+
+                <div class="my-8 border-t border-gray-600"></div>
+                {# A simple break line #} {# No title for pending proposals, now
+                just flows #} {% if pending_proposals %}
+                <div
+                    class="bg-gray-700 p-4 rounded-md max-h-60 overflow-y-auto scroll-container space-y-2"
+                >
+                    <p
+                        class="font-semibold text-white text-center text-lg mb-2"
+                    >
+                        Pending Proposals (Up to 3)
+                    </p>
+                    {% for proposal in pending_proposals %}
+                    <div class="border-b border-gray-600 pb-2 last:border-b-0">
+                        <p class="font-semibold text-white">
+                            {{ proposal.name }}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Created: {{ proposal.created_at | datetimeformat('%b
+                            %d, %H:%M') | safe }}
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            Proposed Locking: {{ proposal.new_locking_period }}
+                            min | Claim: {{ proposal.new_claim_time_min }} - {{
+                            proposal.new_claim_time_max }} min
+                        </p>
+                        {% if proposal.start_time and proposal.end_time %}
+                        <p class="text-sm text-gray-400">
+                            Temporary: {{ proposal.start_time | datetimeformat |
+                            safe }} to {{ proposal.end_time | datetimeformat |
+                            safe }}
+                        </p>
+                        {% endif %} {# Voting stats (low footprint) vs. buttons
+                        #} {# In a real application, 'user_voted_on_proposal'
+                        would come from backend context #} {# For this demo, we
+                        show both for illustration, but one would be hidden
+                        based on state #} {% set user_has_voted = false %} {#
+                        Placeholder: Assume user has NOT voted for demo purposes
+                        #} {% if user_has_voted %}
+                        <p class="text-sm text-gray-500 flex items-center mt-1">
+                            <span class="mr-2 opacity-50">&#x1F44D;</span> {{
+                            proposal.stats.favorability }}% Favorability &nbsp;
+                            &bull; &nbsp;
+                            <span class="mr-2 opacity-50">&#x1F465;</span> {{
+                            proposal.stats.engagement }} Engagement
+                        </p>
+                        {% else %}
+                        <div
+                            class="flex items-center space-x-2 mt-1 vote-buttons"
+                        >
+                            <button
+                                type="button"
+                                data-vote-type="UPVOTE"
+                                data-proposal-id="{{ proposal.id }}"
+                                class="vote-button font-bold py-1 px-2 rounded-md text-xs {% if proposal.user_vote == 'UPVOTE' %} bg-green-600 {% else %} bg-green-700 hover:bg-green-600 {% endif %} text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 transition duration-300"
+                                {%
+                                if
+                                proposal.user_vote
+                                %}
+                                disabled
+                                {%
+                                endif
+                                %}
+                            >
+                                &#x1F44D;
+                                <span class="votes-for-count"
+                                    >{{ proposal.votes_for }}</span
+                                >
+                            </button>
+                            <button
+                                type="button"
+                                data-vote-type="DOWNVOTE"
+                                data-proposal-id="{{ proposal.id }}"
+                                class="vote-button font-bold py-1 px-2 rounded-md text-xs {% if proposal.user_vote == 'DOWNVOTE' %} bg-red-600 {% else %} bg-red-700 hover:bg-red-600 {% endif %} text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition duration-300"
+                                {%
+                                if
+                                proposal.user_vote
+                                %}
+                                disabled
+                                {%
+                                endif
+                                %}
+                            >
+                                &#x1F44E;
+                                <span class="votes-against-count"
+                                    >{{ proposal.votes_against }}</span
+                                >
+                            </button>
+                            <span class="text-sm text-gray-400 ml-auto"
+                                >Total Votes:
+                                <span class="total-votes-count"
+                                    >{{ proposal.total_votes }}</span
+                                ></span
+                            >
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-400 text-center">
+                    No pending proposals for this spawn.
+                </p>
+                {% endif %}
+
+                <div class="my-8 border-t border-gray-600"></div>
+                {# A simple break line #}
+
+                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
+                    Bid History
+                </h3>
+                <div class="bg-gray-700 p-4 rounded-md">
+                    <p class="text-gray-400">
+                        No bid history available yet. (Placeholder)
+                    </p>
+                    {# Future: Loop through bids here #}
+                </div>
+
+                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
+                    Hunt History
+                </h3>
+                <div class="bg-gray-700 p-4 rounded-md">
+                    <p class="text-gray-400">
+                        No hunt history available yet. (Placeholder)
+                    </p>
+                    {# Future: Loop through hunts here #}
                 </div>
             </div>
 
-            {# Placeholder for future sections like recent hunts, bids, etc. #}
-            <div class="bg-gray-700 p-4 rounded-lg shadow-md mb-8">
-                <h3 class="text-xl font-semibold text-white mb-2">
-                    Activity & History
-                </h3>
-                <p class="text-gray-400">
-                    Information about recent hunts, active bids, and proposals
-                    for changes will appear here.
-                </p>
-            </div>
-
-            <div class="text-center mt-6 space-x-4">
+            <div class="text-center mt-8 space-x-4">
                 <a
                     href="/worlds/{{ world.name }}"
-                    class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
+                    class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+                    >Back to World</a
                 >
-                    Back to World Page
-                </a>
                 <a
-                    href="/"
+                    href="/dashboard"
                     class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                    >Back to Dashboard</a
                 >
-                    Back to Home
-                </a>
             </div>
         </div>
         <script src="/static/localize_time.js"></script>
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const messageArea = document.getElementById("message-area");
+                const errorArea = document.getElementById("error-area");
+
+                function showMessage(message, type = "success") {
+                    if (type === "success") {
+                        messageArea.textContent = message;
+                        messageArea.classList.remove("hidden", "bg-red-500");
+                        messageArea.classList.add("bg-green-500");
+                        errorArea.classList.add("hidden");
+                    } else {
+                        // type === 'error'
+                        errorArea.textContent = message;
+                        errorArea.classList.remove("hidden", "bg-green-500");
+                        errorArea.classList.add("bg-red-500");
+                        messageArea.classList.add("hidden");
+                    }
+                    setTimeout(() => {
+                        messageArea.classList.add("hidden");
+                        errorArea.classList.add("hidden");
+                    }, 5000); // Hide after 5 seconds
+                }
+
+                document.querySelectorAll(".vote-button").forEach((button) => {
+                    button.addEventListener("click", async (event) => {
+                        const proposalId = event.target.dataset.proposalId;
+                        const voteType = event.target.dataset.voteType; // 'UPVOTE' or 'DOWNVOTE'
+                        const url = `/worlds/{{ world.name }}/spawns/{{ spawn.name }}/vote`;
+
+                        const formData = new FormData();
+                        formData.append("proposal_id", proposalId);
+                        formData.append("vote_type", voteType);
+
+                        // Disable all buttons for this proposal temporarily
+                        const proposalDiv =
+                            event.target.closest("[data-proposal-id]");
+                        const buttons =
+                            proposalDiv.querySelectorAll(".vote-button");
+                        buttons.forEach((btn) => (btn.disabled = true));
+
+                        // Show loading indicator (optional, but good for UX)
+                        event.target.textContent = "Voting...";
+
+                        try {
+                            const response = await fetch(url, {
+                                method: "POST",
+                                body: formData,
+                            });
+
+                            const result = await response.json();
+
+                            if (response.ok) {
+                                showMessage(result.message, "success");
+                                // Update vote counts dynamically
+                                const votesForSpan =
+                                    proposalDiv.querySelector(
+                                        ".votes-for-count",
+                                    );
+                                const votesAgainstSpan =
+                                    proposalDiv.querySelector(
+                                        ".votes-against-count",
+                                    );
+                                const totalVotesSpan =
+                                    proposalDiv.querySelector(
+                                        ".total-votes-count",
+                                    );
+                                const userVoteStatus =
+                                    proposalDiv.querySelector(
+                                        ".user-vote-status",
+                                    );
+
+                                if (
+                                    result.status === "approved" ||
+                                    result.status === "rejected" ||
+                                    result.status === "pending"
+                                ) {
+                                    // Re-enable if needed, or keep disabled if proposal is no longer pending
+                                    // For now, keep them disabled if a vote was cast and status is final or user already voted
+                                    // Revert button text
+                                    buttons.forEach((btn) => {
+                                        if (btn.dataset.voteType === "UPVOTE") {
+                                            btn.textContent = `👍 ${result.current_votes_for !== undefined ? result.current_votes_for : votesForSpan.textContent}`;
+                                        } else {
+                                            btn.textContent = `👎 ${result.current_votes_against !== undefined ? result.current_votes_against : votesAgainstSpan.textContent}`;
+                                        }
+                                    });
+
+                                    // Update counts if provided by the response
+                                    if (
+                                        result.current_votes_for !== undefined
+                                    ) {
+                                        votesForSpan.textContent =
+                                            result.current_votes_for;
+                                    }
+                                    if (
+                                        result.current_votes_against !==
+                                        undefined
+                                    ) {
+                                        votesAgainstSpan.textContent =
+                                            result.current_votes_against;
+                                    }
+                                    if (result.total_votes !== undefined) {
+                                        totalVotesSpan.textContent =
+                                            result.total_votes;
+                                    }
+
+                                    // Update user's vote status
+                                    if (result.your_vote) {
+                                        userVoteStatus.innerHTML = `You have voted: <span class="font-semibold text-white">${result.your_vote}</span>`;
+                                    } else if (
+                                        result.status === "already_voted"
+                                    ) {
+                                        userVoteStatus.innerHTML = `You have already voted: <span class="font-semibold text-white">${result.your_vote}</span>`;
+                                    } else {
+                                        userVoteStatus.innerHTML = ""; // Clear if no vote by user
+                                    }
+
+                                    // Apply voted styles immediately
+                                    buttons.forEach((btn) => {
+                                        if (
+                                            btn.dataset.voteType ===
+                                            result.your_vote
+                                        ) {
+                                            btn.classList.add(
+                                                "bg-green-600",
+                                                "bg-red-600",
+                                            ); // Add the specific color for the vote cast
+                                            btn.classList.remove(
+                                                "bg-green-700",
+                                                "hover:bg-green-600",
+                                                "bg-red-700",
+                                                "hover:bg-red-600",
+                                            );
+                                        }
+                                    });
+                                } else if (result.status === "already_voted") {
+                                    // If already voted, re-enable correct button and show message
+                                    showMessage(result.message, "error");
+                                    buttons.forEach((btn) => {
+                                        btn.disabled = false; // Re-enable all buttons
+                                        if (
+                                            btn.dataset.voteType ===
+                                            result.your_vote
+                                        ) {
+                                            btn.classList.add("bg-green-600"); // Assuming UPVOTE if it's already voted
+                                            btn.classList.remove(
+                                                "bg-green-700",
+                                                "hover:bg-green-600",
+                                            );
+                                        } else {
+                                            btn.classList.add("bg-red-600");
+                                            btn.classList.remove(
+                                                "bg-red-700",
+                                                "hover:bg-red-600",
+                                            );
+                                        }
+                                    });
+                                    // Set button text back
+                                    if (
+                                        event.target.dataset.voteType ===
+                                        "UPVOTE"
+                                    ) {
+                                        event.target.textContent = `👍 ${votesForSpan.textContent}`;
+                                    } else {
+                                        event.target.textContent = `👎 ${votesAgainstSpan.textContent}`;
+                                    }
+                                    userVoteStatus.innerHTML = `You have already voted: <span class="font-semibold text-white">${result.your_vote}</span>`;
+                                }
+                                // Re-disable all buttons for this proposal if the proposal is no longer pending.
+                                if (
+                                    result.status === "approved" ||
+                                    result.status === "rejected"
+                                ) {
+                                    buttons.forEach(
+                                        (btn) => (btn.disabled = true),
+                                    );
+                                }
+                            } else {
+                                // Handle HTTP errors (e.g., 400, 500)
+                                const errorMessage =
+                                    result.detail ||
+                                    result.message ||
+                                    "An unknown error occurred.";
+                                showMessage(errorMessage, "error");
+                                // Re-enable buttons on error
+                                buttons.forEach(
+                                    (btn) => (btn.disabled = false),
+                                );
+                                // Set button text back
+                                if (
+                                    event.target.dataset.voteType === "UPVOTE"
+                                ) {
+                                    event.target.textContent = `👍 ${proposalDiv.querySelector(".votes-for-count").textContent}`;
+                                } else {
+                                    event.target.textContent = `👎 ${proposalDiv.querySelector(".votes-against-count").textContent}`;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Fetch error:", error);
+                            showMessage(
+                                "Network error or server unreachable.",
+                                "error",
+                            );
+                            // Re-enable buttons on network error
+                            buttons.forEach((btn) => (btn.disabled = false));
+                            // Set button text back
+                            if (event.target.dataset.voteType === "UPVOTE") {
+                                event.target.textContent = `👍 ${proposalDiv.querySelector(".votes-for-count").textContent}`;
+                            } else {
+                                event.target.textContent = `👎 ${proposalDiv.querySelector(".votes-against-count").textContent}`;
+                            }
+                        }
+                    });
+                });
+            });
+        </script>
     </body>
 </html>

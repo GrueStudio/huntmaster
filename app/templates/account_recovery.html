@@ -71,8 +71,8 @@
                         ></span
                     >
                     <span
-                        >Expires: {{ token.expiration_time.strftime('%Y-%m-%d
-                        %H:%M UTC') }}</span
+                        >Expires: {{ token.expiration_time | datetimeformat |
+                        safe }}</span
                     >
                     {% if token.used %}
                     <span class="text-red-400">Used</span>

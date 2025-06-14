@@ -4,7 +4,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import logging
@@ -14,8 +13,7 @@ import logging
 from database import get_db
 from models import User, Character, World # Import all necessary models
 
-# Configure Jinja2Templates (assuming templates directory is relative to app root)
-templates = Jinja2Templates(directory="templates")
+from templating import templates
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ async def list_characters(
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Fetch all characters from the database
-    characters = db.query(Character).order_by(Character.name).all()
+    characters = db.query(Character).filter(Character.user_id == user_id).order_by(Character.name).all()
 
     return templates.TemplateResponse(
         "character_list.html",
@@ -419,6 +417,7 @@ async def validate_character(
     if not tibia_character_comment or expected_hash not in tibia_character_comment:
         error_message = "Validation hash not found in character comment. Please ensure it's correctly placed on Tibia.com."
         logger.warning(f"Validation hash not found for character {character_name}")
+        logger.info(f"Comment: {tibia_character_comment}")
         return RedirectResponse(
             url=f"/character/verify?character_name={character_name}&error={error_message}",
             status_code=status.HTTP_303_SEE_OTHER

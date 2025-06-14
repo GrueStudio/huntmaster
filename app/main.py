@@ -4,7 +4,7 @@ import httpx # Import httpx for making async HTTP requests
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from templating import templates
 from fastapi.staticfiles import StaticFiles
 
 from sqlalchemy.orm import Session
@@ -28,8 +28,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SESSION_SECRET_
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Configure Jinja2Templates (assuming templates directory is relative to app root)
-templates = Jinja2Templates(directory="templates")
+
 
 # --- Helper Function for Timezone Conversion ---
 def convert_to_utc_naive(dt: datetime) -> datetime:

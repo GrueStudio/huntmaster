@@ -3,19 +3,16 @@ import uuid
 
 from fastapi import APIRouter, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from database import get_db
+from templating import templates
 from models import User, RecoveryToken
 
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Configure Jinja2Templates (assuming templates directory is relative to app root)
-templates = Jinja2Templates(directory="templates")
 
 router = APIRouter()
 
@@ -58,14 +55,13 @@ async def get_register_form(request: Request):
 async def post_register_form(
     request: Request,
     username: str = Form(...),
-    email: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
     db: Session = Depends(get_db)
 ):
     error_message = None
 
-    if not username or not email or not password or not confirm_password:
+    if not username or not password or not confirm_password:
         error_message = "All fields are required."
     elif password != confirm_password:
         error_message = "Passwords do not match."
@@ -92,7 +88,7 @@ async def post_register_form(
 
     except IntegrityError:
         db.rollback()
-        error_message = "A user with this username or email already exists (database integrity error)."
+        error_message = "A user with this username already exists (database integrity error)."
         return templates.TemplateResponse("register.html", {"request": request, "error": error_message})
     except Exception as e:
         db.rollback()
