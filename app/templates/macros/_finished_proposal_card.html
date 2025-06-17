@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Finished Proposal Card Preview</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                padding: 1rem;
+            }
+            .container {
+                background-color: #2d3748; /* bg-gray-700 equivalent for context */
+                padding: 2rem;
+                border-radius: 0.5rem;
+                max-width: 400px;
+                width: 100%;
+            }
+        </style>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body>
+        <div class="container space-y-4 text-gray-300">
+            <h2 class="text-2xl font-bold text-white text-center mb-4">
+                Macro Preview
+            </h2>
+
+            {# Define the macro directly within this preview for
+            self-containment #} {% macro render_finished_proposal(proposal) %}
+            <div class="border-b border-gray-600 pb-2 last:border-b-0">
+                <p class="font-semibold text-white">
+                    {{ proposal.name }} (Status: {{
+                    proposal.status.value.capitalize() }})
+                </p>
+                <p class="text-sm text-gray-400 flex items-center">
+                    <i
+                        class="fas fa-lock mr-1"
+                        title="Locking Period: The period in minutes before a winning bid starts, during which the spawn is 'locked' for the bidder."
+                    ></i>
+                    {{ proposal.new_locking_period | durationformat }}
+                    <i
+                        class="fas fa-scales mr-1"
+                        title="Deprioritize Time: The maximum time per day a user's characters can hunt in this spawn before their new bids are de-prioritized."
+                    ></i>
+                    {{ proposal.new_deprioratization_time | durationformat if
+                    proposal.new_deprioratization_time is not none else '∞' }}
+                    <span class="ml-2">
+                        <i
+                            class="fas fa-clock mr-1"
+                            title="Claim Time Range: The minimum and maximum time a character can claim a hunt on this spawn, in minutes."
+                        ></i>
+                        {{ proposal.new_claim_time_min | durationformat }} - {{
+                        proposal.new_claim_time_max | durationformat }} min
+                    </span>
+                </p>
+                {% if proposal.start_time and proposal.end_time %}
+                <p class="text-sm text-gray-400 flex items-center">
+                    <i
+                        class="fas fa-hourglass-half mr-1"
+                        title="Active Duration"
+                    ></i>
+                    {{ proposal.start_time | dateformat }} to {{
+                    proposal.end_time | dateformat }}
+                </p>
+                {% endif %}
+                <p class="text-sm text-gray-500 flex items-center mt-1">
+                    <i
+                        class="fas fa-thumbs-up mr-1 opacity-50"
+                        title="Favorability"
+                    ></i>
+                    {{ proposal.stats.favorability }}% &nbsp;
+                    <i
+                        class="fas fa-users ml-2 mr-1 opacity-50"
+                        title="Engagement"
+                    ></i>
+                    {{ proposal.stats.engagement }}
+                    <i
+                        class="fas fa-calendar-alt mr-1"
+                        title="Approval Date"
+                    ></i>
+                    {{ proposal.approved_at | datetimeformat | safe }}
+                </p>
+            </div>
+            {% endmacro %} {# Dummy data for previewing the macro #} {% set
+            dummy_proposal_1 = { 'id': 1, 'name': 'Increased EXP Zone',
+            'status': {'value': 'approved'}, 'approved_at':
+            '2024-06-15T10:00:00Z', 'new_locking_period': 30,
+            'new_claim_time_min': 20, 'new_claim_time_max': 60, 'start_time':
+            None, 'end_time': None, 'stats': {'favorability': 85, 'engagement':
+            150} } %} {% set dummy_proposal_2 = { 'id': 2, 'name': 'Temporary
+            Loot Boost', 'status': {'value': 'rejected'}, 'approved_at':
+            '2024-06-12T14:30:00Z', 'new_locking_period': 10,
+            'new_claim_time_min': 5, 'new_claim_time_max': 30, 'start_time':
+            '2024-06-10T00:00:00Z', 'end_time': '2024-06-17T23:59:59Z', 'stats':
+            {'favorability': 40, 'engagement': 200} } %} {# Call the macro with
+            the dummy data #} {{ render_finished_proposal(dummy_proposal_1) }}
+            <div class="mt-4"></div>
+            {# Small separator #} {{ render_finished_proposal(dummy_proposal_2)
+            }}
+        </div>
+        {# Include localize_time.js for datetime formatting #}
+        <script src="/static/localize_time.js"></script>
+    </body>
+</html>

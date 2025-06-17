@@ -263,19 +263,54 @@ async def get_spawn_detail_page(
         SpawnChangeProposal.end_time >= now_utc
     ).order_by(SpawnChangeProposal.approved_at.desc()).first()
 
-    # Fetch recently rejected proposals (displayed for a week)
+    # Fetch recently rejected AND approved proposals (displayed for a week)
     one_week_ago = now_utc - timedelta(days=7)
-    recently_rejected_proposals = db.query(SpawnChangeProposal).filter(
-            SpawnChangeProposal.spawn_id == spawn.id,
-            SpawnChangeProposal.status.in_([ProposalStatus.REJECTED, ProposalStatus.APPROVED]), # Modified filter
-            SpawnChangeProposal.approved_at >= one_week_ago # Assuming approved_at is used for rejection/approval timestamp
-        ).order_by(SpawnChangeProposal.approved_at.desc()).all()
+    recently_rejected_and_approved_proposals = db.query(SpawnChangeProposal).filter(
+        SpawnChangeProposal.spawn_id == spawn.id,
+        SpawnChangeProposal.status.in_([ProposalStatus.REJECTED, ProposalStatus.APPROVED]), # Modified filter
+        SpawnChangeProposal.approved_at >= one_week_ago # Assuming approved_at is used for rejection/approval timestamp
+    ).order_by(SpawnChangeProposal.approved_at.desc()).all()
+
 
     # Fetch currently pending proposals (limit to 3, scrollable)
-    pending_proposals = db.query(SpawnChangeProposal).filter(
+    pending_proposals_raw = db.query(SpawnChangeProposal).filter(
         SpawnChangeProposal.spawn_id == spawn.id,
         SpawnChangeProposal.status == ProposalStatus.PENDING
     ).order_by(SpawnChangeProposal.created_at.asc()).limit(3).all()
+
+    # Get logged-in user ID for template rendering logic and fetching user-specific data
+    logged_in_user_id = request.session.get('user_id')
+
+    # Prepare pending proposals with user's vote status
+    pending_proposals = []
+    if logged_in_user_id:
+        # Eager load the spawn_change_proposals_voted to get the vote type
+        user = db.query(User).options(joinedload(User.spawn_change_proposals_voted)).filter(User.id == logged_in_user_id).first()
+        if user:
+            # Query the proposal_votes association table directly for user's votes
+            user_vote_records = db.query(
+                proposal_votes.c.spawn_change_proposal_id,
+                proposal_votes.c.vote_type
+            ).filter(
+                proposal_votes.c.user_id == logged_in_user_id
+            ).all()
+
+            # Create a dictionary to quickly look up user's vote for each proposal
+            user_votes = {record.spawn_change_proposal_id: record.vote_type.value for record in user_vote_records}
+
+            for proposal in pending_proposals_raw:
+                # Check if the user has voted on this specific proposal
+                proposal.user_vote = user_votes.get(proposal.id)
+                pending_proposals.append(proposal)
+        else:
+            # If user not found (e.g., session stale), treat as not logged in for voting purposes
+            for proposal in pending_proposals_raw:
+                proposal.user_vote = None
+                pending_proposals.append(proposal)
+    else:
+        for proposal in pending_proposals_raw:
+            proposal.user_vote = None
+            pending_proposals.append(proposal)
 
     # Helper to calculate engagement and favorability for proposals
     def calculate_proposal_stats(proposal):
@@ -297,7 +332,7 @@ async def get_spawn_detail_page(
         last_approved_permanent_proposal.stats = calculate_proposal_stats(last_approved_permanent_proposal)
     if last_approved_temporary_proposal:
         last_approved_temporary_proposal.stats = calculate_proposal_stats(last_approved_temporary_proposal)
-    for proposal in recently_rejected_proposals:
+    for proposal in recently_rejected_and_approved_proposals: # Apply to the combined list
         proposal.stats = calculate_proposal_stats(proposal)
     for proposal in pending_proposals:
         proposal.stats = calculate_proposal_stats(proposal)
@@ -310,11 +345,13 @@ async def get_spawn_detail_page(
             "spawn": spawn,
             "last_approved_permanent_proposal": last_approved_permanent_proposal,
             "last_approved_temporary_proposal": last_approved_temporary_proposal,
-            "recently_rejected_proposals": recently_rejected_proposals,
+            "recently_rejected_proposals": recently_rejected_and_approved_proposals, # Pass the combined list
             "pending_proposals": pending_proposals,
-            "now_utc": now_utc # Pass current UTC time for template logic
+            "now_utc": now_utc, # Pass current UTC time for template logic
+            "logged_in_user_id": logged_in_user_id # Pass for frontend logic
         }
     )
+
 @router.post("/worlds/{world_name}/sponsor", status_code=status.HTTP_200_OK)
 async def sponsor_spawn_proposal(
     request: Request,
