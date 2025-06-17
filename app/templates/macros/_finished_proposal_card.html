@@ -52,8 +52,7 @@
                 Macro Preview
             </h2>
 
-            {# Define the macro directly within this preview for
-            self-containment #} {% macro render_finished_proposal(proposal) %}
+            {% macro render_finished_proposal(proposal) %}
             <div class="border-b border-gray-600 pb-2 last:border-b-0">
                 <p class="font-semibold text-white">
                     {{ proposal.name }} (Status: {{
@@ -108,24 +107,8 @@
                     {{ proposal.approved_at | datetimeformat | safe }}
                 </p>
             </div>
-            {% endmacro %} {# Dummy data for previewing the macro #} {% set
-            dummy_proposal_1 = { 'id': 1, 'name': 'Increased EXP Zone',
-            'status': {'value': 'approved'}, 'approved_at':
-            '2024-06-15T10:00:00Z', 'new_locking_period': 30,
-            'new_claim_time_min': 20, 'new_claim_time_max': 60, 'start_time':
-            None, 'end_time': None, 'stats': {'favorability': 85, 'engagement':
-            150} } %} {% set dummy_proposal_2 = { 'id': 2, 'name': 'Temporary
-            Loot Boost', 'status': {'value': 'rejected'}, 'approved_at':
-            '2024-06-12T14:30:00Z', 'new_locking_period': 10,
-            'new_claim_time_min': 5, 'new_claim_time_max': 30, 'start_time':
-            '2024-06-10T00:00:00Z', 'end_time': '2024-06-17T23:59:59Z', 'stats':
-            {'favorability': 40, 'engagement': 200} } %} {# Call the macro with
-            the dummy data #} {{ render_finished_proposal(dummy_proposal_1) }}
-            <div class="mt-4"></div>
-            {# Small separator #} {{ render_finished_proposal(dummy_proposal_2)
-            }}
+            {% endmacro %}
         </div>
-        {# Include localize_time.js for datetime formatting #}
         <script src="/static/localize_time.js"></script>
     </body>
 </html>

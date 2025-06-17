@@ -101,9 +101,7 @@
                 Pending Proposal Macro Preview
             </h2>
 
-            {# Define the macro directly within this preview for
-            self-containment #} {% macro render_pending_proposal(proposal,
-            logged_in_user_id) %}
+            {% macro render_pending_proposal(proposal, logged_in_user_id) %}
             <div
                 class="border-b border-gray-600 pb-2 last:border-b-0"
                 data-proposal-id="{{ proposal.id }}"
@@ -117,37 +115,31 @@
                     Proposed: {{ proposal.created_at | datetimeformat }}
                 </p>
                 <p class="text-sm text-gray-400 flex items-center">
-                    <i
-                        class="fas fa-lock mr-1"
-                        title="Proposed Locking Period"
-                    ></i>
+                    <i class="fas fa-lock mr-1" title="Locking Period"></i>
                     {{ proposal.new_locking_period | durationformat }}
                     <span class="ml-2">
                         <i
                             class="fas fa-clock mr-1"
-                            title="Proposed Claim Time Range"
+                            title="Claim Time Range"
                         ></i>
                         {{ proposal.new_claim_time_min | durationformat }} - {{
                         proposal.new_claim_time_max | durationformat }}
                     </span>
-                    {# Check if new_deprioratization_time attribute is defined
-                    before accessing #} {% if proposal.new_deprioratization_time
-                    is defined %}
+                    {% if proposal.new_deprioratization_time is defined %}
                     <span class="ml-2">
                         <i
                             class="fas fa-balance-scale mr-1"
-                            title="Proposed Deprioritize Time"
+                            title="Deprioritize Time"
                         ></i>
                         {{ proposal.new_deprioratization_time | durationformat
                         if proposal.new_deprioratization_time is not none else
                         '&infin;' }}
                     </span>
-                    {% else %} {# Fallback if the attribute is not defined
-                    (e.g., older data without this field) #}
+                    {% else %}
                     <span class="ml-2">
                         <i
                             class="fas fa-balance-scale mr-1"
-                            title="Proposed Deprioritize Time (Not specified)"
+                            title="Deprioritize Time"
                         ></i>
                         &infin;
                     </span>
@@ -162,20 +154,21 @@
                     {{ proposal.start_time | dateformat }} - {{
                     proposal.end_time | dateformat }}
                 </p>
-                {% endif %} {# Conditional voting section based on
-                logged_in_user_id #} {% if logged_in_user_id %}
+                {% endif %} {% if logged_in_user_id %}
                 <div class="flex items-center space-x-2 mt-1 vote-section">
-                    {# Display static icons/text if user has already voted,
-                    otherwise show interactive buttons #} {% if
-                    proposal.user_vote %} {# User has voted, show their vote and
-                    total counts #}
+                    {% if proposal.user_vote %}
                     <div
                         class="flex items-center space-x-2 text-gray-400 font-bold text-sm"
                     >
-                        Your Vote: {% if proposal.user_vote == 'UPVOTE' %}
-                        <span class="text-green-400 text-lg">&#x1F44D;</span>
-                        {% elif proposal.user_vote == 'DOWNVOTE' %}
-                        <span class="text-red-400 text-lg">&#x1F44E;</span>
+                        Your Vote: {% if proposal.user_vote.upper() == 'UPVOTE'
+                        %}
+                        <span class="bg-green-400 text-lg text-center"
+                            >&#x1F44D;</span
+                        >
+                        {% elif proposal.user_vote.upper() == 'DOWNVOTE' %}
+                        <span class="bg-red-400 text-lg text-center"
+                            >&#x1F44E;</span
+                        >
                         {% endif %}
                         <span class="ml-auto"
                             >Total Votes:
@@ -184,8 +177,7 @@
                             ></span
                         >
                     </div>
-                    {% else %} {# User has NOT voted, show interactive buttons
-                    #}
+                    {% else %}
                     <button
                         type="button"
                         data-vote-type="upvote"
@@ -232,10 +224,6 @@
                     >
                 </p>
                 <p class="text-sm text-red-300 mt-1">Log in to vote!</p>
-                <p class="text-xs text-red-400 mt-1">
-                    Debug logged_in_user_id: {{ logged_in_user_id }} (Expected a
-                    non-zero number if logged in)
-                </p>
                 {% endif %}
             </div>
             {% endmacro %}
