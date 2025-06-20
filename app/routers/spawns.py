@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, UTC, time
 import pytz
 
 from database import get_db
-from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, proposal_votes, VoteType # Import necessary models and enums
+from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote # Import necessary models and enums
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -288,12 +288,7 @@ async def get_spawn_detail_page(
         user = db.query(User).options(joinedload(User.spawn_change_proposals_voted)).filter(User.id == logged_in_user_id).first()
         if user:
             # Query the proposal_votes association table directly for user's votes
-            user_vote_records = db.query(
-                proposal_votes.c.spawn_change_proposal_id,
-                proposal_votes.c.vote_type
-            ).filter(
-                proposal_votes.c.user_id == logged_in_user_id
-            ).all()
+            user_vote_records = db.query(Vote).filter(Vote.user_id == logged_in_user_id).all()
 
             # Create a dictionary to quickly look up user's vote for each proposal
             user_votes = {record.spawn_change_proposal_id: record.vote_type.value for record in user_vote_records}
@@ -549,10 +544,7 @@ async def vote_on_spawn_change_proposal(
 
     # Check if the user has already voted on this proposal
     # We need to query the association table directly for the user's vote
-    existing_vote_record = db.query(proposal_votes).filter(
-        proposal_votes.c.user_id == user_id,
-        proposal_votes.c.spawn_change_proposal_id == proposal_id
-    ).first()
+    existing_vote_record = db.query(Vote).filter(Vote.user_id == user_id, Vote.proposal_id == proposal_id).first()
 
     if existing_vote_record:
         # User has already voted. Decide if re-voting is allowed or simply return a message.
@@ -561,13 +553,9 @@ async def vote_on_spawn_change_proposal(
 
     try:
         # Add the vote record to the association table
-        vote_entry = {
-            "user_id": user_id,
-            "spawn_change_proposal_id": proposal_id,
-            "vote_type": vote_type
-        }
-        db.execute(proposal_votes.insert().values(vote_entry))
+        vote = Vote(user = user, proposal = proposal, vote_type=vote_type)
 
+        db.add(vote)
         db.add(proposal) # Add proposal back to session to mark it for update
         db.commit()
         db.refresh(proposal) # Refresh to get updated vote counts

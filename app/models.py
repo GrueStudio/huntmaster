@@ -1,13 +1,14 @@
 import bcrypt
 import hashlib
 import enum
+import math
 
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric, event, Enum, Table
-from sqlalchemy.orm import relationship, session
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric, event, Enum, Table, Interval
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func, select
+from sqlalchemy.sql import func, select, and_
 from sqlalchemy.ext.hybrid import hybrid_property
 
 class ProposalStatus(enum.Enum):
@@ -34,13 +35,17 @@ proposal_sponsors = Table(
     Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
     Column('spawn_proposal_id', Integer, ForeignKey('spawn_proposals.id'), primary_key=True)
 )
-proposal_votes = Table(
-    'spawn_change_proposal_votes',
-    Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
-    Column('spawn_change_proposal_id', Integer, ForeignKey('spawn_change_proposals.id'), primary_key=True),
-    Column('vote_type', Enum(VoteType))
-)
+
+class Vote(Base):
+    __tablename__ = 'change_votes'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    proposal_id = Column(Integer, ForeignKey('spawn_change_proposals.id'), primary_key=True)
+    vote_type = Column(Enum(VoteType))
+
+    user = relationship('User', back_populates='votes', lazy='joined')
+    proposal = relationship("SpawnChangeProposal", back_populates='votes', lazy='joined')
+
+
 
 # New association table for User and Spawn (Favorites)
 user_spawn_favorites = Table(
@@ -60,6 +65,7 @@ class User(Base):
     recovery_tokens = relationship('RecoveryToken', back_populates='user', lazy='joined')
     is_admin = Column(Boolean, default=False)
     notifications = relationship('Notification', back_populates='user') # Added back_populates
+    votes = relationship('Vote', back_populates='user', lazy='joined')
 
     sponsored_proposals = relationship(
         "SpawnProposal",
@@ -68,13 +74,7 @@ class User(Base):
         secondaryjoin=lambda: SpawnProposal.id == proposal_sponsors.c.spawn_proposal_id, # Explicit secondaryjoin
         back_populates="sponsors"
     )
-    spawn_change_proposals_voted = relationship(
-        "SpawnChangeProposal",
-        secondary=proposal_votes,
-        primaryjoin=lambda: User.id == proposal_votes.c.user_id,
-        secondaryjoin=lambda: SpawnChangeProposal.id == proposal_votes.c.spawn_change_proposal_id,
-        back_populates="voters"
-    )
+
     favourite_spawns = relationship(
         "Spawn",
         secondary=user_spawn_favorites,
@@ -168,9 +168,60 @@ class World(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(80), unique=True, nullable=False)
     location = Column(String(255), nullable=True) # e.g., "North America", "Europe"
+
+    inactive_threshold = Column(Interval, nullable=False, default=timedelta(days=30))
+    engagement_threshold = Column(Numeric, nullable=False, default=0.5)
+    favourability_approval = Column(Numeric, nullable=False, default=0.6)
+    favourability_rejection = Column(Numeric, nullable=False, default=0.3)
+    sponsorship_flat = Column(Integer, nullable=False, default=5)
+    sposorship_fraction = Column(Numeric, nullable=False, default=0.01)
+
     spawns = relationship('Spawn', back_populates='world', lazy='joined')
     spawn_proposals = relationship('SpawnProposal', back_populates='world', lazy='joined')
     characters = relationship('Character', back_populates='world', lazy='joined')
+
+    def get_active_users(self, db):
+        """
+        Returns a list of User objects who are considered active in this world.
+        An active user has at least one character in this world with a bid or hunt
+        activity within the world's inactive_threshold (in days).
+        This method requires a database session.
+        """
+        # Calculate the threshold date in Python for the query
+        threshold_date = datetime.now(UTC) - self.inactive_threshold
+
+        # Query to find the latest activity date (Bid or Hunt) for each user
+        # across their characters in this specific world.
+        latest_user_activity_in_world = (
+            db.query(
+                User.id.label('user_id'),
+                func.max(func.greatest(
+                    Bid.created_at,
+                    Hunt.created_at
+                )).label('overall_last_activity')
+            )
+            .join(Character, Character.user_id == User.id)
+            .outerjoin(Bid, Bid.character_id == Character.id)
+            .outerjoin(Hunt, Hunt.character_id == Character.id)
+            .filter(Character.world_id == self.id) # Filter characters to this specific world instance
+            .group_by(User.id)
+        ).subquery()
+
+        # Query for User objects based on their latest activity date in this world
+        active_users_query = (
+            db.query(User)
+            .join(latest_user_activity_in_world, latest_user_activity_in_world.c.user_id == User.id)
+            .filter(
+                and_(
+                    latest_user_activity_in_world.c.overall_last_activity.isnot(None), # Must have activity
+                    latest_user_activity_in_world.c.overall_last_activity >= threshold_date # Activity is recent enough
+                )
+            )
+            .distinct() # Ensure distinct User objects
+        )
+
+        return active_users_query.all()
+
 
     def __repr__(self):
         return f'<World {self.name}>'
@@ -180,9 +231,12 @@ class Spawn(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(80), nullable=False) # Made name non-unique
     description = Column(String(200), nullable=True)
-    locking_period = Column(Integer, nullable=False) # Time in minutes before a winning bid starts
-    claim_time_min = Column(Integer, nullable=False)
-    claim_time_max = Column(Integer, nullable=False)
+
+    locking_period = Column(Interval, nullable=False, default=timedelta(minutes=15)) # Time in minutes before a winning bid starts
+    claim_time_min = Column(Interval, nullable=False, default=timedelta(minutes=15))
+    claim_time_max = Column(Interval, nullable=False, default=timedelta(hours=3, minutes=15))
+    deprioratize_time = Column(Interval, nullable=True)
+
     proposal_id = Column(Integer, ForeignKey('spawn_proposals.id'))
     world_id = Column(Integer, ForeignKey('worlds.id'), nullable=False)
 
@@ -204,6 +258,49 @@ class Spawn(Base):
         UniqueConstraint('name', 'world_id', name='_spawn_name_world_uc'),
     )
 
+    def get_active_users(self, db):
+        """
+        Returns a list of User objects who are considered active for this specific spawn.
+        An active user has at least one character with activity on this spawn
+        within the spawn's associated world's inactive_threshold days.
+        This method requires a database session.
+        """
+        if not self.world: # Ensure world is loaded for inactive_threshold
+            db.refresh(self, attribute_names=['world']) # Eager load if not already
+
+        threshold_date = datetime.now(UTC) - timedelta(days=self.world.inactive_threshold)
+
+        # Query to find the latest activity date (Bid or Hunt) for each user
+        # across their characters on this specific spawn.
+        latest_user_activity_on_spawn = (
+            db.query(
+                User.id.label('user_id'),
+                func.max(func.greatest(
+                    Bid.created_at,
+                    Hunt.created_at
+                )).label('overall_last_activity')
+            )
+            .join(Character, Character.user_id == User.id)
+            .outerjoin(Bid, and_(Bid.character_id == Character.id, Bid.spawn_id == self.id)) # Filter bids to this spawn
+            .outerjoin(Hunt, and_(Hunt.character_id == Character.id, Hunt.spawn_id == self.id)) # Filter hunts to this spawn
+            .filter(Character.world_id == self.world_id) # Ensure character is in the same world as spawn
+            .group_by(User.id)
+        ).subquery()
+
+        # Query for User objects based on their latest activity date on this spawn
+        active_users_query = (
+            db.query(User)
+            .join(latest_user_activity_on_spawn, latest_user_activity_on_spawn.c.user_id == User.id)
+            .filter(
+                and_(
+                    latest_user_activity_on_spawn.c.overall_last_activity.isnot(None), # Must have activity
+                    latest_user_activity_on_spawn.c.overall_last_activity >= threshold_date # Activity is recent enough
+                )
+            )
+            .distinct()
+        )
+        return active_users_query.all()
+
     def __repr__(self):
         return f'<Spawn {self.name}>'
 
@@ -220,6 +317,11 @@ class SpawnProposal(Base):
 
     min_level = Column(Integer, nullable=True)
     max_level = Column(Integer, nullable=True)
+
+    locking_period = Column(Interval, nullable=False, default=timedelta(minutes=15)) # Time in minutes before a winning bid starts
+    claim_time_min = Column(Interval, nullable=False, default=timedelta(minutes=15))
+    claim_time_max = Column(Interval, nullable=False, default=timedelta(hours=3, minutes=15))
+    deprioratize_time = Column(Interval, nullable=True)
 
     status = Column(Enum(ProposalStatus), default=ProposalStatus.PENDING)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
@@ -262,9 +364,10 @@ class SpawnChangeProposal(Base):
     start_time = Column(DateTime(timezone=True), nullable=True)
     end_time = Column(DateTime(timezone=True), nullable=True)
 
-    new_locking_period = Column(Integer, nullable=False) # Time in minutes before a winning bid starts
-    new_claim_time_min = Column(Integer, nullable=False)
-    new_claim_time_max = Column(Integer, nullable=False)
+    locking_period = Column(Interval, nullable=False, default=timedelta(minutes=15)) # Time in minutes before a winning bid starts
+    claim_time_min = Column(Interval, nullable=False, default=timedelta(minutes=15))
+    claim_time_max = Column(Interval, nullable=False, default=timedelta(hours=3, minutes=15))
+    deprioratize_time = Column(Interval, nullable=True)
 
     status = Column(Enum(ProposalStatus), default=ProposalStatus.PENDING)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
@@ -273,14 +376,7 @@ class SpawnChangeProposal(Base):
     # Link to the actual Spawn if the proposal is approved and spawn created
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=True)
     spawn = relationship('Spawn', foreign_keys=[spawn_id], back_populates='change_proposals') # Link back to the created Spawn
-
-    voters = relationship(
-        "User",
-        secondary=proposal_votes,
-        primaryjoin=lambda: SpawnChangeProposal.id == proposal_votes.c.spawn_change_proposal_id,
-        secondaryjoin=lambda: User.id == proposal_votes.c.user_id,
-        back_populates="spawn_change_proposals_voted"
-    )
+    votes = relationship('Vote', back_populates='user', lazy='joined')
 
     __table_args__ = (
         CheckConstraint(
@@ -289,61 +385,35 @@ class SpawnChangeProposal(Base):
         ),
     )
 
+    @property
+    def total_votes(self):
+        return len(self.votes)
+
+    @property
+    def favourability(self):
+        return math.floor(self.votes_for / self.total_votes * 100)
+
+    @property
+    def engagement(self):
+        return math.floor(self.total_votes / self.spawn.active_users)
+
     @hybrid_property
     def votes_for(self) -> int:
         """Calculates the total upvotes for this change proposal."""
-        # This implementation queries the association table directly for the instance.
-        # It's less efficient than a single query with the expression, but works for hybrid properties.
-        # Ensure that self.id is available (i.e., object is persistent).
-        if self.id is None:
-            # If the object is not yet committed or not associated with a session,
-            # we can't query, so return 0. This might happen for new, unsaved objects.
-            return 0
-
-        return (
-            session.object_session(self).query(func.count(proposal_votes.c.user_id))
-            .filter(
-                proposal_votes.c.spawn_change_proposal_id == self.id,
-                proposal_votes.c.vote_type == VoteType.UPVOTE
-            )
-            .scalar() or 0
-        )
-    @property
-    def total_votes(self):
-        return self.votes_for + self.votes_against
+        return sum([1 for vote in self.votes if vote.vote_type == VoteType.UPVOTE])
 
     @votes_for.expression
     def votes_for_ex(cls):
-        return (
-            select(func.count(proposal_votes.c.user_id))
-            .where(proposal_votes.c.spawn_change_proposal_id == cls.id)
-            .where(proposal_votes.c.vote_type == VoteType.UPVOTE)
-            .label("total_upvotes")
-        )
+        return func.count(Vote.id).filter((Vote.proposal_id == cls.id) & (Vote.vote_type == 'UPVOTE'))
 
     @hybrid_property
     def votes_against(self) -> int:
         """Calculates the total downvotes for this change proposal."""
-        if self.id is None or not session.object_session(self):
-            return 0
-
-        return (
-            session.object_session(self).query(func.count(proposal_votes.c.user_id))
-            .filter(
-                proposal_votes.c.spawn_change_proposal_id == self.id,
-                proposal_votes.c.vote_type == VoteType.DOWNVOTE
-            )
-            .scalar() or 0
-        )
+        return sum([1 for vote in self.votes if vote.vote_type == VoteType.DOWNVOTE])
 
     @votes_against.expression
     def votes_against_ex(cls):
-        return (
-            select(func.count(proposal_votes.c.user_id))
-            .where(proposal_votes.c.spawn_change_proposal_id == cls.id)
-            .where(proposal_votes.c.vote_type == VoteType.DOWNVOTE)
-            .label("total_downvotes")
-        )
+        return func.count(Vote.id).filter((Vote.proposal_id == cls.id) & (Vote.vote_type == 'DOWNVOTE'))
 
     def __repr__(self) -> str:
         return f"<SpawnChangeProposal(id={self.id}, name='{self.name}', status='{self.status.value}')>"
@@ -392,6 +462,7 @@ class Bid(Base):
     claim_time = Column(Integer, nullable=False)
     scheduled_start = Column(DateTime, nullable=True) # Added scheduled_start
     is_locked = Column(Boolean, default=False)
+
     __table_args__ = (
         UniqueConstraint('character_id', 'spawn_id', 'hunt_window_start', name='_character_spawn_start_uc'),
         CheckConstraint('hunt_window_end > hunt_window_start', name='_end_after_start'),
