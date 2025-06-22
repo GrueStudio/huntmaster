@@ -7,3 +7,4 @@ sqlalchemy
 bcrypt
 pytz
 itsdangerous
+httpx

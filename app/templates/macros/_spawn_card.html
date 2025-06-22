@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Spawn Card Preview</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                padding: 1rem;
+                color: #e2e8f0; /* Light text color for card content */
+            }
+            .card-link {
+                display: block; /* Make the anchor tag a block element */
+                background-color: #2d3748; /* Darker card background */
+                border-radius: 0.75rem;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                padding: 1.5rem;
+                margin: 0rem 1.5rem;
+                max-width: 400px;
+                width: 100%;
+                text-decoration: none; /* Remove underline from the link */
+                color: inherit; /* Inherit text color from parent */
+                transition:
+                    background-color 0.2s ease-in-out,
+                    transform 0.2s ease-in-out;
+            }
+            .card-link:hover {
+                background-color: #3b4d63; /* Slightly lighter on hover */
+                transform: translateY(-3px); /* Subtle lift effect */
+            }
+            .card-icon {
+                color: #90cdf4; /* Light blue for icons */
+                width: 1.25rem; /* Ensure consistent icon size */
+                text-align: center;
+            }
+        </style>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+            // No dummy data or JavaScript formatting functions here as requested.
+            // Jinja filters (e.g., | timedeltaformat) are expected to be available in the application context.
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <h2 class="text-2xl font-bold text-white text-center mb-6">
+                Spawn Card Preview
+            </h2>
+            {% macro spawn_card(spawn, world) %}
+            <a
+                href="/worlds/{{ world.name }}/spawns/{{ spawn.name }}"
+                class="card-link"
+            >
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">{{ spawn.name }}</h3>
+                        <p class="text-gray-400 mb-4">
+                            {{ spawn.description | default('No description
+                            provided.', true) }}
+                        </p>
+                        <p class="text-sm text-gray-300">
+                            <i
+                                class="fas fa-lock card-icon mr-2"
+                                title="Locking Period: The period in time before a winning bid starts, after which the spawn is 'locked' for the bidder."
+                            ></i>
+                            {{ spawn.locking_period | timedeltaformat | safe }}
+                        </p>
+                        <p class="text-sm text-gray-300">
+                            <i
+                                class="fas fa-clock card-icon mr-2"
+                                title="Claim Time: The minimum and maximum time a character can claim a hunt on this spawn."
+                            ></i>
+                            {{ spawn.claim_time_min | timedeltaformat | safe }}
+                            - {{ spawn.claim_time_max | timedeltaformat | safe
+                            }}
+                        </p>
+                        <p class="text-sm text-gray-300">
+                            <i
+                                class="fas fa-balance-scale-right card-icon mr-2"
+                                title="Deprioritize Time: The maximum cumulative time a character can hunt in this spawn per day before their bids are de-prioritized."
+                            ></i>
+                            {{ spawn.deprioratize_time | timedeltaformat | safe
+                            }}
+                        </p>
+                    </div>
+                </div>
+            </a>
+            {% endmacro %}
+        </div>
+    </body>
+</html>

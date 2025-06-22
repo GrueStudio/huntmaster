@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Spawn Proposal Card Preview</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                padding: 1rem;
+                color: #e2e8f0; /* Light text color for card content */
+            }
+            .card {
+                background-color: #2d3748; /* Darker card background */
+                border-radius: 0.75rem;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+                width: 100%;
+            }
+            .card-icon {
+                color: #90cdf4; /* Light blue for icons */
+                width: 1.25rem; /* Ensure consistent icon size */
+                text-align: center;
+            }
+            .btn-primary {
+                background-color: #3b82f6;
+                color: white;
+                padding: 0.6rem 1.2rem;
+                border-radius: 0.5rem;
+                font-weight: 600;
+                transition: background-color 0.2s ease-in-out;
+                border: none;
+                cursor: pointer;
+            }
+            .btn-primary:hover {
+                background-color: #2563eb;
+            }
+        </style>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+
+            // Placeholder for Jinja's timedeltaformat if viewing directly in browser
+            // In your actual Flask/FastAPI app, this filter would be defined server-side.
+            function timedeltaformat(minutes) {
+                if (minutes === null || typeof minutes === "undefined")
+                    return "N/A";
+                minutes = parseInt(minutes);
+                if (isNaN(minutes)) return "Invalid Time";
+                if (minutes < 0) return "Negative Time";
+
+                const days = Math.floor(minutes / (24 * 60));
+                minutes %= 24 * 60;
+                const hours = Math.floor(minutes / 60);
+                minutes %= 60;
+
+                let parts = [];
+                if (days > 0) {
+                    parts.push(`${days}d`);
+                }
+                if (hours > 0) {
+                    parts.push(`${hours}h`);
+                }
+                if (minutes > 0 || (days === 0 && hours === 0)) {
+                    parts.push(`${minutes}m`);
+                }
+                return parts.join(" ") || "0m";
+            }
+
+            // Dummy handleSponsorClick function for preview purposes
+            function handleSponsorClick(buttonElement) {
+                const proposalId = buttonElement.dataset.proposalId;
+                const worldName = buttonElement.dataset.worldName;
+                alert(
+                    `Simulating sponsorship for Proposal ID: ${proposalId} in World: ${worldName}`,
+                );
+                // In a real app, this would make an AJAX call to your backend
+                // and update the UI based on the response.
+                buttonElement.disabled = true;
+                buttonElement.classList.remove(
+                    "bg-blue-green",
+                    "hover:bg-blue-700",
+                );
+                buttonElement.classList.add(
+                    "bg-gray-500",
+                    "cursor-not-allowed",
+                );
+                const sponsorCountSpan = document.getElementById(
+                    `sponsor-count-${proposalId}`,
+                );
+                if (sponsorCountSpan) {
+                    let [current, total] = sponsorCountSpan.textContent
+                        .split("/")
+                        .map(Number);
+                    current++;
+                    sponsorCountSpan.textContent = `${current}/${total}`;
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <h2 class="text-2xl font-bold text-white text-center mb-6">
+                Spawn Proposal Card Preview
+            </h2>
+            {% macro spawn_proposal_card(proposal, world, sponsors_required) %}
+            <div class="card flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xl font-bold mb-2">
+                        {{ proposal.name | default('Unnamed Proposal', true) }}
+                    </h3>
+                    <p class="text-gray-400 mb-4 text-sm">
+                        {{ proposal.description | default('No description
+                        provided.', true) }}
+                    </p>
+
+                    <div
+                        class="flex flex-wrap items-start justify-between mb-3"
+                    >
+                        {# Changed to items-start #}
+                        <div class="w-full">
+                            {# Full width for level and details #}
+                            <p class="text-sm text-gray-300 mb-2">
+                                <span
+                                    title="Recommended Level: The suggested level range for characters to hunt in this proposed spawn."
+                                >
+                                    <i
+                                        class="fas fa-chart-line card-icon mr-1"
+                                    ></i
+                                    >Levels: {{ proposal.min_level }} - {{
+                                    proposal.max_level }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="w-full">
+                            {# Full width for bid settings #}
+                            <p class="text-xs text-gray-400 mb-1">
+                                <span
+                                    title="Locking Period: The duration, in minutes, during which a proposed spawn is 'locked' for the winning bidder before the hunt window opens."
+                                >
+                                    <i class="fas fa-lock card-icon mr-1"></i>{{
+                                    proposal.locking_period | timedeltaformat }}
+                                </span>
+                            </p>
+                            <p class="text-xs text-gray-400 mb-1">
+                                <span
+                                    title="Claim Time: The minimum and maximum duration, in minutes, a character can claim a hunt on this proposed spawn."
+                                >
+                                    <i class="fas fa-clock card-icon mr-1"></i
+                                    >{{ proposal.claim_time_min |
+                                    timedeltaformat }} - {{
+                                    proposal.claim_time_max | timedeltaformat }}
+                                </span>
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                <span
+                                    title="Deprioritize Time: The maximum cumulative time, in minutes per day, a character can hunt in this proposed spawn before their new bids are de-prioritized."
+                                >
+                                    <i class="fas fa-ban card-icon mr-1"></i>{{
+                                    proposal.deprioratize_time | timedeltaformat
+                                    }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 text-right">
+                    {# Adjusted margin-top for spacing and text-right for button
+                    alignment #}
+                    <p class="text-sm text-gray-300 inline-flex items-center">
+                        <span
+                            title="Sponsors: The number of unique users who have supported this proposal."
+                        >
+                            <i class="fas fa-users card-icon mr-2"></i>Sponsors:
+                            <span id="sponsor-count-{{ proposal.id }}"
+                                >{{ proposal.num_sponsors }} / {{
+                                sponsors_required }}</span
+                            >
+                        </span>
+                        <button
+                            class="btn-primary ml-auto px-3 py-1 text-sm sponsor-button"
+                            data-proposal-id="{{ proposal.id }}"
+                            data-world-name="{{ world.name }}"
+                            onclick="handleSponsorClick(this)"
+                        >
+                            Sponsor Proposal
+                        </button>
+                    </p>
+                </div>
+            </div>
+            {% endmacro %}
+        </div>
+    </body>
+</html>

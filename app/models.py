@@ -174,7 +174,7 @@ class World(Base):
     favourability_approval = Column(Numeric, nullable=False, default=0.6)
     favourability_rejection = Column(Numeric, nullable=False, default=0.3)
     sponsorship_flat = Column(Integer, nullable=False, default=5)
-    sposorship_fraction = Column(Numeric, nullable=False, default=0.01)
+    sposorship_fraction = Column(Numeric, nullable=False, default=0.1)
 
     spawns = relationship('Spawn', back_populates='world', lazy='joined')
     spawn_proposals = relationship('SpawnProposal', back_populates='world', lazy='joined')
@@ -196,8 +196,8 @@ class World(Base):
             db.query(
                 User.id.label('user_id'),
                 func.max(func.greatest(
-                    Bid.created_at,
-                    Hunt.created_at
+                    Bid.hunt_window_start,
+                    Hunt.start_time
                 )).label('overall_last_activity')
             )
             .join(Character, Character.user_id == User.id)
@@ -276,8 +276,8 @@ class Spawn(Base):
             db.query(
                 User.id.label('user_id'),
                 func.max(func.greatest(
-                    Bid.created_at,
-                    Hunt.created_at
+                    Bid.hunt_window_start,
+                    Hunt.start_time
                 )).label('overall_last_activity')
             )
             .join(Character, Character.user_id == User.id)
@@ -376,7 +376,7 @@ class SpawnChangeProposal(Base):
     # Link to the actual Spawn if the proposal is approved and spawn created
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=True)
     spawn = relationship('Spawn', foreign_keys=[spawn_id], back_populates='change_proposals') # Link back to the created Spawn
-    votes = relationship('Vote', back_populates='user', lazy='joined')
+    votes = relationship('Vote', back_populates='proposal', lazy='joined')
 
     __table_args__ = (
         CheckConstraint(

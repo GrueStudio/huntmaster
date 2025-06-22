@@ -162,11 +162,12 @@
                     >
                         Your Vote: {% if proposal.user_vote.upper() == 'UPVOTE'
                         %}
-                        <span class="bg-green-400 text-lg text-center"
+                        <span
+                            class="bg-green-400 text-lg text-center rounded-sm"
                             >&#x1F44D;</span
                         >
                         {% elif proposal.user_vote.upper() == 'DOWNVOTE' %}
-                        <span class="bg-red-400 text-lg text-center"
+                        <span class="bg-red-400 text-lg text-center rounded-sm"
                             >&#x1F44E;</span
                         >
                         {% endif %}

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, UTC, time
 import pytz
 
 from database import get_db
-from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote # Import necessary models and enums
+from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote, user_spawn_favorites # Import necessary models and enums
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -35,16 +35,11 @@ async def get_world_page(
     if not world:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
 
-    # Calculate the number of unique users with characters in this world
-    unique_users_in_world = db.query(func.count(distinct(Character.user_id))).filter(
-        Character.world_id == world.id, # Filter by world.id now
-        Character.user_id.isnot(None) # Only count characters assigned to a user
-    ).scalar()
+    logged_in_user_id = request.session.get('user_id')
 
-    # Calculate the total number of characters in this world
-    total_characters_in_world = db.query(func.count(Character.id)).filter(
-        Character.world_id == world.id # Filter by world.id now
-    ).scalar()
+    characters_on_world = db.query(Character).filter(Character.world_id == world.id, Character.user_id == logged_in_user_id).all()
+    unique_characters = db.query(Character).filter(Character.world_id == world.id).count()
+    unique_users = db.query(Character.user_id).filter(Character.world_id == world.id).distinct().count()
 
     # Fetch all Spawns associated with this World
     spawns_in_world = db.query(Spawn).filter(Spawn.world_id == world.id).all() # Filter by world.id now
@@ -55,31 +50,15 @@ async def get_world_page(
         SpawnProposal.status == ProposalStatus.PENDING
     ).order_by(SpawnProposal.created_at.asc()).all()
 
-
-    # Get all spawn IDs for the current world
-    world_spawns = db.query(Spawn.id).filter(Spawn.world_id == world.id).scalar_subquery()
-
-    # Query distinct user_ids whose characters have participated in hunts in this world in the last 90 days
-    ninety_days_ago = datetime.now(UTC) - timedelta(days=90)
-
-    active_users_subquery = db.query(distinct(Character.user_id)).join(Spawn, Character.world_id == Spawn.world_id).subquery()
-        #.join(Hunt).filter(
-        #    Hunt.spawn_id.in_(world_spawns), # Filter hunts to only those within the world's spawns
-        #    Hunt.start_time >= ninety_days_ago).subquery()
-
-    active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
-
-    # Calculate min_sponsors_required once for the page
-    # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
-    percentage_sponsors = round(active_users_count * 0.01) if active_users_count else 0
-    min_sponsors_required = min(5, percentage_sponsors)
+    active_users_count = len(world.get_active_users(db))
+    min_sponsors_required = min(world.sponsorship_flat, round(active_users_count * world.sposorship_fraction))
 
     # Initialize sponsored_proposal_ids and favorited_spawn_ids
     sponsored_proposal_ids = set()
     favorited_spawn_ids = set()
 
     # Get logged-in user ID for template rendering logic and fetching user-specific data
-    logged_in_user_id = request.session.get('user_id')
+
 
     if logged_in_user_id:
         # Fetch the user with their sponsored proposals (eager loading the relationship)
@@ -87,25 +66,11 @@ async def get_world_page(
         # relationship and the associated join table in models.py for this to work.
         user = db.query(User).options(joinedload(User.sponsored_proposals)).filter(User.id == logged_in_user_id).first()
         if user:
-            # Collect IDs of proposals sponsored by the current user
-            sponsored_proposal_ids = {p.id for p in user.sponsored_proposals}
-
-            # --- Placeholder for fetching favorited spawns ---
-            # You will need to define a relationship for User.favorited_spawns in your models.py
-            # For now, we'll simulate fetching from a join table directly.
-            # This requires 'from sqlalchemy import Table, Column, Integer, ForeignKey' in models.py
-            # and defining user_favorite_spawns = Table(...) as a global.
-            # Example (if user_favorite_spawns table exists):
-            # from models import user_favorite_spawns # Import this if defined globally in models.py
-            # favorited_spawn_ids_query = db.query(user_favorite_spawns.c.spawn_id).filter(
-            #     user_favorite_spawns.c.user_id == logged_in_user_id
-            # ).all()
-            # favorited_spawn_ids = {sid[0] for sid in favorited_spawn_ids_query}
-
-            # For demonstration without models.py changes, let's assume a static list or an empty set
-            # This section needs actual implementation once models.py is updated with favorites.
-            # For now, we'll use an empty set, so the star icon will always be outlined.
-            pass # No actual query here for favorited_spawn_ids in this turn
+            sponsored_proposal_ids = [p.id for p in user.sponsored_proposals]
+            favorited_spawn_ids_query = db.query(user_spawn_favorites.c.spawn_id).filter(
+                user_spawn_favorites.c.user_id == logged_in_user_id
+            ).all()
+            favorited_spawn_ids = [sid[0] for sid in favorited_spawn_ids_query]
 
 
     return templates.TemplateResponse(
@@ -113,14 +78,15 @@ async def get_world_page(
         {
             "request": request,
             "world": world,
-            "unique_users_count": unique_users_in_world,
-            "total_characters_count": total_characters_in_world,
+            "unique_users_count": unique_users,
+            "total_characters_count": unique_characters,
+            "characters_on_world": characters_on_world,
             "min_sponsors_required": min_sponsors_required,
             "spawns": spawns_in_world,
             "pending_spawn_proposals": pending_spawn_proposals, # Pass pending proposals to template
             "logged_in_user_id": logged_in_user_id, # Pass logged-in user ID
             "sponsored_proposal_ids": sponsored_proposal_ids, # Pass sponsored proposal IDs
-            "favorited_spawn_ids": favorited_spawn_ids # Pass favorited spawn IDs (currently empty set)
+            "favorited_spawn_ids": favorited_spawn_ids # Pass favorited spawn IDs
         }
     )
 
