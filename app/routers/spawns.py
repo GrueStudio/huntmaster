@@ -120,9 +120,10 @@ async def post_propose_spawn(
     spawn_description: str = Form(None, alias="description"),
     min_level: int = Form(..., alias="min_level"),
     max_level: int = Form(..., alias="max_level"),
-    # Note: respawn_time_minutes, locking_period_minutes, deprioratization_time
-    # are removed from this function's parameters to align with the SpawnProposal model
-    # as they were not part of the previous version of the model.
+    locking_time_mins: int = Form(..., alias='locking_time_mins'),
+    claim_min_mins: int = Form(..., alias='claim_min_mins'),
+    claim_max_mins: int = Form(..., alias='claim_max_mins'),
+    deprioratize_time_mins: int = Form(..., alias="deprioratize_time_mins"),
     db: Session = Depends(get_db)
 ):
     """
@@ -166,6 +167,12 @@ async def post_propose_spawn(
             }
         )
 
+    locking_period = timedelta(minutes=locking_time_mins)
+    claim_time_min = timedelta(minutes=claim_min_mins)
+    claim_time_max = timedelta(minutes=claim_max_mins)
+    deprioritize_time = timedelta(minutes=deprioratize_time_mins)
+
+
     # Create the SpawnProposal in PENDING state
     new_proposal = SpawnProposal(
         name=spawn_name,
@@ -173,6 +180,10 @@ async def post_propose_spawn(
         world_id=world.id,
         min_level=min_level,
         max_level=max_level,
+        locking_period=locking_period,
+        claim_time_min=claim_time_min,
+        claim_time_max=claim_time_max,
+        deprioratize_time=deprioritize_time,
         status=ProposalStatus.PENDING, # Set to PENDING state
         created_at=datetime.now(UTC),
         # approved_at will be set only if/when the proposal is approved
@@ -340,6 +351,8 @@ async def sponsor_spawn_proposal(
     if spawn_proposal.world.name.lower() != world_name.lower():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal does not belong to this world.")
 
+    world = spawn_proposal.world
+
     # Check if the proposal is still pending
     if spawn_proposal.status != ProposalStatus.PENDING:
         return {"message": f"This proposal is already {spawn_proposal.status.value}.", "proposal_id": proposal_id}
@@ -360,25 +373,9 @@ async def sponsor_spawn_proposal(
     # - Has at least one Character associated with that World AND
     # - That character has participated in *any* Hunt within that World in the last 90 days.
 
-    # Get all spawn IDs for the current world
-    world_spawns = db.query(Spawn.id).filter(Spawn.world_id == spawn_proposal.world_id).scalar_subquery()
 
-    # Query distinct user_ids whose characters have participated in hunts in this world in the last 90 days
-    ninety_days_ago = datetime.now(UTC) - timedelta(days=90)
-
-    active_users_subquery = db.query(distinct(Character.user_id)).join(Spawn, Character.world_id == Spawn.world_id).subquery()
-        #.join(Hunt).filter(
-        #    Hunt.spawn_id.in_(world_spawns), # Filter hunts to only those within the world's spawns
-        #    Hunt.start_time >= ninety_days_ago).subquery()
-
-    active_users_count = db.query(func.count()).select_from(active_users_subquery).scalar()
-
-    # Calculate the minimum sponsors required based on hybrid logic
-    # (min 5 unique sponsors OR 1% of active users, whichever is smaller, capped at 20)
-    percentage_sponsors = ceil(active_users_count * 0.01) if active_users_count else 0
-
-    # Ensure minimum 5 sponsors, then consider percentage, then cap at 20
-    min_sponsors_required = min(percentage_sponsors, 5)
+    active_users_count = len(world.get_active_users(db))
+    min_sponsors_required = min(world.sponsorship_flat, round(active_users_count * world.sposorship_fraction))
 
     # Check if the proposal meets the approval threshold
     if spawn_proposal.num_sponsors >= min_sponsors_required:
@@ -390,15 +387,14 @@ async def sponsor_spawn_proposal(
             name=spawn_proposal.name,
             description=spawn_proposal.description,
             world_id=spawn_proposal.world_id,
-            min_level=spawn_proposal.min_level,
-            max_level=spawn_proposal.max_level,
+            # min_level=spawn_proposal.min_level,
+            # max_level=spawn_proposal.max_level,
             # Hardcoded defaults for fields not in SpawnProposal model (for now)
             # These fields need to be added to SpawnProposal model for full configurability
-            locking_period_minutes=15, # Default value
-            claim_time_min=15,         # Default value
-            claim_time_max=180,        # Default value
-            respawn_time_minutes=60,   # Default value
-            claim_times_per_day=1,     # Default value
+            locking_period=spawn_proposal.locking_period, # Default value
+            claim_time_min=spawn_proposal.claim_time_min,         # Default value
+            claim_time_max=spawn_proposal.claim_time_max,        # Default value
+            deprioratize_time=spawn_proposal.deprioratize_time,   # Default value
             proposal_id=spawn_proposal.id, # Link to the proposal
         )
         db.add(new_spawn)
@@ -417,8 +413,12 @@ async def sponsor_spawn_proposal(
                 "id": new_spawn.id,
                 "name": new_spawn.name,
                 "description": new_spawn.description,
-                "min_level": new_spawn.min_level,
-                "max_level": new_spawn.max_level
+                # "min_level": new_spawn.min_level,
+                # "max_level": new_spawn.max_level,
+                "locking_period": new_spawn.locking_period.minutes,
+                "claim_time_min": new_spawn.claim_time_min.minutes,
+                "claim_time_max": new_spawn.claim_time_max.minutes,
+                "deprioratize_time": new_spawn.deprioratize_time.minutes
             }
         })
     else:
