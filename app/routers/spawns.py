@@ -269,7 +269,7 @@ async def get_spawn_detail_page(
         user_vote_records = db.query(Vote).filter(Vote.user_id == logged_in_user_id).all()
 
         # Create a dictionary to quickly look up user's vote for each proposal
-        user_votes = {record.spawn_change_proposal_id: record.vote_type.value for record in user_vote_records}
+        user_votes = {vote.proposal_id: vote.vote_type.value for vote in user_vote_records}
 
         for proposal in pending_proposals_raw:
             # Check if the user has voted on this specific proposal
@@ -383,7 +383,7 @@ async def sponsor_spawn_proposal(
             locking_period=spawn_proposal.locking_period, # Default value
             claim_time_min=spawn_proposal.claim_time_min,         # Default value
             claim_time_max=spawn_proposal.claim_time_max,        # Default value
-            deprioratize_time=spawn_proposal.deprioratize_time,   # Default value
+            deprioratize_time=spawn_proposal.deprioratize_time if spawn_proposal.deprioratize_time != None else timedelta(minutes=0),   # Default value
             proposal_id=spawn_proposal.id, # Link to the proposal
         )
         db.add(new_spawn)
@@ -404,10 +404,10 @@ async def sponsor_spawn_proposal(
                 "description": new_spawn.description,
                 # "min_level": new_spawn.min_level,
                 # "max_level": new_spawn.max_level,
-                "locking_period": new_spawn.locking_period.minutes,
-                "claim_time_min": new_spawn.claim_time_min.minutes,
-                "claim_time_max": new_spawn.claim_time_max.minutes,
-                "deprioratize_time": new_spawn.deprioratize_time.minutes
+                "locking_period": new_spawn.locking_period.seconds//60,
+                "claim_time_min": new_spawn.claim_time_min.seconds//60,
+                "claim_time_max": new_spawn.claim_time_max.seconds//60,
+                "deprioratize_time": new_spawn.deprioratize_time.seconds//60
             }
         })
     else:
@@ -483,9 +483,10 @@ async def vote_on_spawn_change_proposal(
         func.lower(Spawn.name) == spawn_name.lower(),
         func.lower(World.name) == world_name.lower()
     ).first()
+
     if not spawn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found.")
-
+    world = spawn.world
     proposal = db.query(SpawnChangeProposal).filter(
         SpawnChangeProposal.id == proposal_id,
         SpawnChangeProposal.spawn_id == spawn.id
@@ -508,30 +509,23 @@ async def vote_on_spawn_change_proposal(
 
     try:
         # Add the vote record to the association table
-        vote = Vote(user = user, proposal = proposal, vote_type=vote_type)
+        vote = Vote(user=user, proposal=proposal, vote_type=vote_type)
 
         db.add(vote)
         db.add(proposal) # Add proposal back to session to mark it for update
         db.commit()
         db.refresh(proposal) # Refresh to get updated vote counts
 
-        # --- Evaluate Proposal Thresholds ---
-        MIN_TOTAL_VOTES_FOR_EVALUATION = 5 # Minimum total votes before evaluation
-        APPROVAL_PERCENTAGE_THRESHOLD = 75 # 75% upvotes for approval
-
-        if proposal.total_votes >= MIN_TOTAL_VOTES_FOR_EVALUATION:
-            favorability = (proposal.votes_for / proposal.total_votes) * 100
-
-            if favorability >= APPROVAL_PERCENTAGE_THRESHOLD:
+        if proposal.get_engagement(db) >= world.engagement_threshold:
+            if proposal.favourability >= world.favourability_approval:
                 # Proposal approved! Apply changes to the Spawn.
                 proposal.status = ProposalStatus.APPROVED
                 proposal.approved_at = datetime.now(UTC)
-                spawn.locking_period_minutes = proposal.new_locking_period
-                spawn.claim_time_min = proposal.new_claim_time_min
-                spawn.claim_time_max = proposal.new_claim_time_max
-                # For temporary changes, you might need more complex logic
-                # For now, apply directly.
-                db.add(spawn)
+                if proposal.start_time == None:
+                    spawn.locking_period_minutes = proposal.locking_period
+                    spawn.claim_time_min = proposal.claim_time_min
+                    spawn.claim_time_max = proposal.claim_time_max
+                    db.add(spawn)
                 db.add(proposal)
                 db.commit()
                 return {
@@ -542,9 +536,9 @@ async def vote_on_spawn_change_proposal(
                     "current_votes_for": proposal.votes_for, # Return current counts
                     "current_votes_against": proposal.votes_against,
                     "total_votes": proposal.total_votes,
-                    "favorability": round(favorability, 2)
+                    "favorability": proposal.favourability
                 }
-            else:
+            elif proposal.favourability < world.favourability_rejection:
                 # Proposal rejected due to not meeting approval percentage
                 proposal.status = ProposalStatus.REJECTED
                 proposal.approved_at = datetime.now(UTC) # Use approved_at for rejection timestamp too
@@ -558,13 +552,13 @@ async def vote_on_spawn_change_proposal(
                     "current_votes_for": proposal.votes_for, # Return current counts
                     "current_votes_against": proposal.votes_against,
                     "total_votes": proposal.total_votes,
-                    "favorability": round(favorability, 2)
+                    "favorability": proposal.favourability
                 }
         else:
             # Not enough total votes yet, remains pending
             db.commit() # Commit the vote even if not approved yet
             return {
-                "message": f"Vote cast successfully! Proposal is still PENDING. Needs {MIN_TOTAL_VOTES_FOR_EVALUATION - proposal.total_votes} more votes to be evaluated.",
+                "message": f"Vote cast successfully! Proposal is still PENDING.",
                 "proposal_id": proposal_id,
                 "status": "pending",
                 "your_vote": vote_type.value,
@@ -593,6 +587,7 @@ async def post_propose_spawn_change(
     locking_period_minutes: int = Form(...),
     claim_time_min: int = Form(...),
     claim_time_max: int = Form(...),
+    deprioratize_time: int = Form(...),
     temporary_change_toggle: Optional[str] = Form(None), # Checkbox sends 'on' if checked, None if unchecked
     start_date: Optional[str] = Form(None), # Date string 'YYYY-MM-DD'
     end_date: Optional[str] = Form(None),   # Date string 'YYYY-MM-DD'
@@ -617,6 +612,12 @@ async def post_propose_spawn_change(
     ).first()
     if not spawn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world with the provided ID.")
+    world = spawn.world
+    # Prepare settings time deltas
+    locking_period_delta = timedelta(minutes=locking_period_minutes)
+    claim_time_min_delta = timedelta(minutes=claim_time_min)
+    claim_time_max_delta = timedelta(minutes=claim_time_max)
+    deprioratize_delta = timedelta(minutes=deprioratize_time)
 
     # Prepare start_time and end_time based on toggle and date inputs
     proposal_start_time = None
@@ -661,9 +662,10 @@ async def post_propose_spawn_change(
             name=f"Change for {spawn.name}", # Use spawn name for proposal name
             description=spawn.description, # Use current spawn description for proposal description
             spawn_id=spawn.id,
-            new_locking_period=locking_period_minutes,
-            new_claim_time_min=claim_time_min,
-            new_claim_time_max=claim_time_max,
+            locking_period=locking_period_delta,
+            claim_time_min=claim_time_min_delta,
+            claim_time_max=claim_time_max_delta,
+            deprioratize_time=deprioratize_delta,
             start_time=proposal_start_time, # Will be None if toggle is off
             end_time=proposal_end_time,     # Will be None if toggle is off
             status=ProposalStatus.PENDING,
