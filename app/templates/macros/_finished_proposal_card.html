@@ -63,20 +63,19 @@
                         class="fas fa-lock mr-1"
                         title="Locking Period: The period in minutes before a winning bid starts, during which the spawn is 'locked' for the bidder."
                     ></i>
-                    {{ proposal.new_locking_period | durationformat }}
+                    {{ proposal.locking_period | timedeltaformat | safe }}
                     <i
                         class="fas fa-scales mr-1"
                         title="Deprioritize Time: The maximum time per day a user's characters can hunt in this spawn before their new bids are de-prioritized."
                     ></i>
-                    {{ proposal.new_deprioratization_time | durationformat if
-                    proposal.new_deprioratization_time is not none else '∞' }}
+                    {{ proposal.deprioratize_time | timedeltaformat | safe }}
                     <span class="ml-2">
                         <i
                             class="fas fa-clock mr-1"
                             title="Claim Time Range: The minimum and maximum time a character can claim a hunt on this spawn, in minutes."
                         ></i>
-                        {{ proposal.new_claim_time_min | durationformat }} - {{
-                        proposal.new_claim_time_max | durationformat }} min
+                        {{ proposal.claim_time_min | timedeltaformat | safe }} -
+                        {{ proposal.claim_time_max | timedeltaformat | safe }}
                     </span>
                 </p>
                 {% if proposal.start_time and proposal.end_time %}

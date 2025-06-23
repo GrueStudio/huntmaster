@@ -116,34 +116,23 @@
                 </p>
                 <p class="text-sm text-gray-400 flex items-center">
                     <i class="fas fa-lock mr-1" title="Locking Period"></i>
-                    {{ proposal.new_locking_period | durationformat }}
+                    {{ proposal.locking_period | timedeltaformat | safe }}
                     <span class="ml-2">
                         <i
                             class="fas fa-clock mr-1"
                             title="Claim Time Range"
                         ></i>
-                        {{ proposal.new_claim_time_min | durationformat }} - {{
-                        proposal.new_claim_time_max | durationformat }}
+                        {{ proposal.claim_time_min | timedeltaformat | safe }} -
+                        {{ proposal.claim_time_max | timedeltaformat | safe }}
                     </span>
-                    {% if proposal.new_deprioratization_time is defined %}
                     <span class="ml-2">
                         <i
                             class="fas fa-balance-scale mr-1"
                             title="Deprioritize Time"
                         ></i>
-                        {{ proposal.new_deprioratization_time | durationformat
-                        if proposal.new_deprioratization_time is not none else
-                        '&infin;' }}
+                        {{ proposal.deprioratize_time | timedeltaformat | safe
+                        }}
                     </span>
-                    {% else %}
-                    <span class="ml-2">
-                        <i
-                            class="fas fa-balance-scale mr-1"
-                            title="Deprioritize Time"
-                        ></i>
-                        &infin;
-                    </span>
-                    {% endif %}
                 </p>
                 {% if proposal.start_time and proposal.end_time %}
                 <p class="text-sm text-gray-400 flex items-center">

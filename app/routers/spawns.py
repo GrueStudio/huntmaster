@@ -260,43 +260,32 @@ async def get_spawn_detail_page(
 
     # Prepare pending proposals with user's vote status
     pending_proposals = []
-    if logged_in_user_id:
-        # Eager load the spawn_change_proposals_voted to get the vote type
-        user = db.query(User).options(joinedload(User.spawn_change_proposals_voted)).filter(User.id == logged_in_user_id).first()
-        if user:
-            # Query the proposal_votes association table directly for user's votes
-            user_vote_records = db.query(Vote).filter(Vote.user_id == logged_in_user_id).all()
 
-            # Create a dictionary to quickly look up user's vote for each proposal
-            user_votes = {record.spawn_change_proposal_id: record.vote_type.value for record in user_vote_records}
+    # Eager load the spawn_change_proposals_voted to get the vote type
+    user = db.query(User).filter(User.id == logged_in_user_id).first()
 
-            for proposal in pending_proposals_raw:
-                # Check if the user has voted on this specific proposal
-                proposal.user_vote = user_votes.get(proposal.id)
-                pending_proposals.append(proposal)
-        else:
-            # If user not found (e.g., session stale), treat as not logged in for voting purposes
-            for proposal in pending_proposals_raw:
-                proposal.user_vote = None
-                pending_proposals.append(proposal)
+    if user:
+        # Query the proposal_votes association table directly for user's votes
+        user_vote_records = db.query(Vote).filter(Vote.user_id == logged_in_user_id).all()
+
+        # Create a dictionary to quickly look up user's vote for each proposal
+        user_votes = {record.spawn_change_proposal_id: record.vote_type.value for record in user_vote_records}
+
+        for proposal in pending_proposals_raw:
+            # Check if the user has voted on this specific proposal
+            proposal.user_vote = user_votes.get(proposal.id)
+            pending_proposals.append(proposal)
     else:
+        # If user not found (e.g., session stale), treat as not logged in for voting purposes
         for proposal in pending_proposals_raw:
             proposal.user_vote = None
             pending_proposals.append(proposal)
 
     # Helper to calculate engagement and favorability for proposals
     def calculate_proposal_stats(proposal):
-        votes_for = proposal.votes_for # Access hybrid property
-        votes_against = proposal.votes_against # Access hybrid property
-
-        engagement = votes_for + votes_against
-        favorability = 0.0
-        if engagement > 0:
-            favorability = (votes_for / engagement) * 100
-
         return {
-            "engagement": engagement,
-            "favorability": round(favorability, 2) # Round to 2 decimal places
+            "engagement": proposal.get_engagement(db),
+            "favorability": proposal.favourability
         }
 
     # Attach stats to proposals

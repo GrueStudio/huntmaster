@@ -268,7 +268,7 @@ class Spawn(Base):
         if not self.world: # Ensure world is loaded for inactive_threshold
             db.refresh(self, attribute_names=['world']) # Eager load if not already
 
-        threshold_date = datetime.now(UTC) - timedelta(days=self.world.inactive_threshold)
+        threshold_date = datetime.now(UTC) - self.world.inactive_threshold
 
         # Query to find the latest activity date (Bid or Hunt) for each user
         # across their characters on this specific spawn.
@@ -391,11 +391,10 @@ class SpawnChangeProposal(Base):
 
     @property
     def favourability(self):
-        return math.floor(self.votes_for / self.total_votes * 100)
+        return math.floor(self.votes_for / max(self.total_votes, 1) * 100)
 
-    @property
-    def engagement(self):
-        return math.floor(self.total_votes / self.spawn.active_users)
+    def get_engagement(self, session):
+        return math.floor(self.total_votes / max(len(self.spawn.get_active_users(session)),1))
 
     @hybrid_property
     def votes_for(self) -> int:

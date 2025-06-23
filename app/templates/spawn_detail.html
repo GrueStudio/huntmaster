@@ -106,14 +106,15 @@
                                 class="fas fa-lock text-lg mr-2"
                                 title="Locking Period: The period in minutes before a winning bid starts, during which the spawn is 'locked' for the bidder."
                             ></i>
-                            {{ spawn.locking_period_minutes }} minutes
+                            {{ spawn.locking_period | timedeltaformat | safe}}
                         </p>
                         <p class="flex items-center">
                             <i
                                 class="fas fa-clock text-lg mr-2"
                                 title="Claim Time Range: The minimum and maximum time a character can claim a hunt on this spawn, in minutes."
                             ></i>
-                            {{ spawn.claim_time_min }} - {{ spawn.claim_time_max
+                            {{ spawn.claim_time_min | timedeltaformat | safe }}
+                            - {{ spawn.claim_time_max | timedeltaformat | safe
                             }} minutes
                         </p>
                         <p class="flex items-center">
@@ -121,7 +122,8 @@
                                 class="fas fa-balance-scale text-lg mr-2"
                                 title="Deprioritize Time: The maximum time per day a user's characters can hunt in this spawn before their new bids are de-prioritized."
                             ></i>
-                            &infin;
+                            {{ spawn.deprioratize_time | timedeltaformat | safe
+                            }}
                         </p>
 
                         {# Button to propose a bid setting change #}
@@ -156,18 +158,18 @@
                                     title="Locking Period"
                                 ></i>
                                 {{
-                                last_approved_permanent_proposal.new_locking_period
-                                }} min
+                                last_approved_permanent_proposal.locking_period
+                                | timedeltaformat | safe }} min
                                 <span class="ml-2">
                                     <i
                                         class="fas fa-clock mr-1"
                                         title="Claim Time Range"
                                     ></i>
                                     {{
-                                    last_approved_permanent_proposal.new_claim_time_min
-                                    }} - {{
-                                    last_approved_permanent_proposal.new_claim_time_max
-                                    }} min
+                                    last_approved_permanent_proposal.claim_time_min
+                                    | timedeltaformat | safe }} - {{
+                                    last_approved_permanent_proposal.claim_time_max
+                                    | timedeltaformat | safe }} min
                                 </span>
                             </p>
                             <p class="text-gray-500 flex items-center mt-1">
@@ -204,8 +206,8 @@
                                     title="Locking Period"
                                 ></i>
                                 {{
-                                last_approved_temporary_proposal.new_locking_period
-                                }} min
+                                last_approved_temporary_proposal.locking_period
+                                | timedeltaformat | safe }} min
                                 <span class="ml-2">
                                     <i
                                         class="fas fa-clock mr-1"
@@ -213,9 +215,9 @@
                                     ></i>
                                     {{
                                     last_approved_temporary_proposal.new_claim_time_min
-                                    }} - {{
+                                    | timedeltaformat | safe }} - {{
                                     last_approved_temporary_proposal.new_claim_time_max
-                                    }} min
+                                    | timedeltaformat | safe }} min
                                 </span>
                             </p>
                             <p class="text-gray-400 flex items-center">
