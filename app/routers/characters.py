@@ -1,7 +1,5 @@
-from enum import verify
 import hashlib
 import httpx
-from datetime import datetime
 from json import JSONDecodeError
 
 from fastapi import APIRouter, Request, Form, Depends, status
@@ -66,75 +64,18 @@ async def create_character(
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     error_message = None
-    tibia_level = None
-    tibia_vocation = None
-    tibia_world_name = None
-
-    # 1. Check if a VERIFIED character with this name already exists in our DB
-    # A character is considered verified if its validation_hash is NULL
-    existing_verified_character = db.query(Character).filter(
-        Character.name == name,
-        Character.validation_hash.is_(None) # Check if it's already verified
-    ).first()
-
-    if existing_verified_character:
-        error_message = f"Character '{name}' is already verified and owned by another user."
-        return RedirectResponse(
-            url=f"/characters?error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
 
     # 2. Fetch character details from TibiaData.com
-    TIBIADATA_CHARACTER_API = f"https://api.tibiadata.com/v4/character/{name}"
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(TIBIADATA_CHARACTER_API)
-            response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
-            tibia_data = response.json()
+    character_data, error = await get_character_data(name)
+    if not character_data:
+        return RedirectResponse(url=f"/characters?error={error}", status_code=status.HTTP_303_SEE_OTHER)
 
-        # Extract character details
-        character_info = tibia_data.get('character', {}).get('character', {})
-        if not character_info:
-            error_message = f"Character '{name}' not found on Tibia.com."
-            return RedirectResponse(
-                url=f"/characters?error={error_message}",
-                status_code=status.HTTP_303_SEE_OTHER
-            )
-
-        tibia_level = character_info['level']
-        tibia_vocation = character_info['vocation']
-        tibia_world_name = character_info['world']
-
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            error_message = f"Character '{name}' not found on Tibia.com."
-        else:
-            error_message = f"Error fetching character data from Tibia.com: {e.response.status_code} - {e.response.text}"
-        logger.error(f"HTTP error fetching TibiaData: {e}")
-        return RedirectResponse(
-            url=f"/characters?error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-    except httpx.RequestError as e:
-        error_message = f"Network error connecting to Tibia.com: {e}"
-        logger.error(f"Network error fetching TibiaData: {e}")
-        return RedirectResponse(
-            url=f"/characters?error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-    except Exception as e:
-        error_message = f"An unexpected error occurred while fetching character data: {e}"
-        logger.error(f"Error fetching TibiaData: {e}")
-        return RedirectResponse(
-            url=f"/characters?error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
 
     # 3. Find or Create World
-    world = db.query(World).filter(World.name == tibia_world_name).first()
+    world = db.query(World).filter(World.name == character_data['world']).first()
     if not world:
         # If world doesn't exist, create it (should ideally be handled by startup script)
-        world = World(name=tibia_world_name, location="Unknown") # Default location if not provided by API
+        world = World(name=character_data['world'], location="Unknown") # Default location if not provided by API
         db.add(world)
         db.commit() # Commit world creation immediately to get its ID
         db.refresh(world)
@@ -148,38 +89,21 @@ async def create_character(
 
     # 5. Create or Update Character record in our DB
     # If the character exists but is NOT verified, we can update it.
-    existing_character_unverified = db.query(Character).filter(
-        Character.name == name,
-        Character.validation_hash.isnot(None) # Character exists but is not yet verified
-    ).first()
 
     try:
-        if existing_character_unverified:
-            # Update existing unverified character
-            existing_character_unverified.level = tibia_level
-            existing_character_unverified.vocation = tibia_vocation
-            existing_character_unverified.world_id = world.id
-            existing_character_unverified.user_id = user.id # Assign to current user
-            existing_character_unverified.validation_hash = validation_hash # Update hash
-            db.add(existing_character_unverified)
-            db.commit()
-            db.refresh(existing_character_unverified)
-            new_character = existing_character_unverified
-            message_text = f"Character '{new_character.name}' updated with new validation hash: {validation_hash}. Please place this hash in your Tibia.com character comment to validate."
-        else:
-            # Create new character
-            new_character = Character(
-                name=name,
-                level=tibia_level,
-                vocation=tibia_vocation,
-                user_id=user.id,
-                world_id=world.id,
-                validation_hash=validation_hash # Assign the generated hash
-            )
-            db.add(new_character)
-            db.commit()
-            db.refresh(new_character)
-            message_text = f"Character '{new_character.name}' added successfully! Your validation hash is: {validation_hash}. Please place this hash in your Tibia.com character comment to validate."
+        # Create new character
+        new_character = Character(
+            name=name,
+            level=character_data['level'],
+            vocation=character_data['vocation'],
+            user_id=user.id,
+            world_id=world.id,
+            validation_hash=validation_hash # Assign the generated hash
+        )
+        db.add(new_character)
+        db.commit()
+        db.refresh(new_character)
+        message_text = f"Character '{new_character.name}' added successfully! Your validation hash is: {validation_hash}. Please place this hash in your Tibia.com character comment to validate."
 
         return RedirectResponse(
             url=f"/characters/{new_character.name}?message={message_text}",
@@ -215,6 +139,17 @@ async def view_character_detail(
     user_id = request.session.get('user_id')
     logger.info(f"Viewing character detail for {character_name} by {username}")
 
+    # get and update character data
+    character_data, other_characters = await get_character_data(character_name)
+    if not character_data:
+        error_message = f"Character '{character_name}' not found."
+        return RedirectResponse(
+            url=f"/characters?error={error_message}",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+    db.query(Character).filter(Character.name == character_name).update({"level": character_data['level']})
+    challenges = db.query(Character).filter(Character.name == character_name, Character.validation_hash != None).count()
+
     if not username or not user_id:
         # Redirect to login if not authenticated
         logger.info(f"Redirecting {username} to login")
@@ -239,7 +174,7 @@ async def view_character_detail(
 
     return templates.TemplateResponse(
         "character_details.html",
-        {"request": request, "character": character, "message": message}
+        { "request": request, "character": character, "message": message, 'challenges': challenges }
     )
 
 
@@ -355,6 +290,11 @@ def verify_character(user : User, world : World, character_data : dict, db : Ses
     character_in_db = db.query(Character).filter(
             and_(Character.name == character_name, Character.user_id == user.id)
         ).first()
+    other_verified_claims = db.query(Character).filter(
+        Character.name == character_name,
+        Character.validation_hash == None,
+        Character.user_id != user.id
+    ).all()
     if character_in_db and not character_in_db.validated:
         character_in_db.validation_hash = None
         db.commit()
@@ -364,6 +304,12 @@ def verify_character(user : User, world : World, character_data : dict, db : Ses
         db.add(character_in_db)
         db.commit()
         db.refresh(character_in_db)
+
+    if len(other_verified_claims) > 0:
+        for other_claim in other_verified_claims:
+            db.delete(other_claim)
+            db.commit()
+            db.refresh(other_claim)
     return character_in_db
 
 async def get_character_data(character_name: str):
