@@ -18,6 +18,58 @@ router = APIRouter()
 
 from templating import templates
 
+@router.get("/worlds", response_class=HTMLResponse)
+async def get_all_worlds(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Displays a page listing all available game worlds with basic statistics.
+    """
+    # Get all worlds with their spawn counts
+    worlds = db.query(World).order_by(World.name).all()
+
+    # Get spawn counts per world
+    spawn_counts = db.query(
+        Spawn.world_id,
+        func.count(Spawn.id).label('spawn_count')
+    ).group_by(Spawn.world_id).all()
+    spawn_counts = {world_id: count for world_id, count in spawn_counts}
+
+    # Get character counts per world
+    character_counts = db.query(
+        Character.world_id,
+        func.count(Character.id).label('character_count')
+    ).group_by(Character.world_id).all()
+    character_counts = {world_id: count for world_id, count in character_counts}
+
+    # Get user counts per world
+    user_counts = db.query(
+        Character.world_id,
+        func.count(distinct(Character.user_id)).label('user_count')
+    ).group_by(Character.world_id).all()
+    user_counts = {world_id: count for world_id, count in user_counts}
+
+    # Prepare world data with statistics
+    worlds_data = []
+    for world in worlds:
+        worlds_data.append({
+            "world": world,
+            "spawn_count": spawn_counts.get(world.id, 0),
+            "character_count": character_counts.get(world.id, 0),
+            "user_count": user_counts.get(world.id, 0),
+            "active_users_count": len(world.get_active_users(db))
+        })
+
+    return templates.TemplateResponse(
+        "world_list.html",
+        {
+            "request": request,
+            "worlds": worlds_data,
+            "logged_in_user_id": request.session.get('user_id')
+        }
+    )
+
 @router.get("/worlds/{world_name}", response_class=HTMLResponse)
 async def get_world_page(
     request: Request,

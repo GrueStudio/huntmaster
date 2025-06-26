@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>All Worlds - HuntMaster</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #1c1c1c; /* eerie-black */
+            }
+        </style>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            coyote: "#866533",
+                            "reseda-green": "#5c6c4b",
+                            "caput-mortuum": "#6a2824",
+                            "blue-green": "#28a1cc",
+                            "eerie-black": "#1c1c1c",
+                        },
+                        fontFamily: {
+                            inter: ["Inter", "sans-serif"],
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body class="min-h-screen p-4 bg-eerie-black">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-blue-green mb-2">
+                    All Worlds
+                </h1>
+                <p class="text-gray-400">Browse all available game worlds</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for world_data in worlds %}
+                <div
+                    class="bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+                >
+                    <div class="p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <h2 class="text-2xl font-bold text-white">
+                                <a
+                                    href="/worlds/{{ world_data.world.name }}"
+                                    class="hover:text-blue-green transition-colors"
+                                >
+                                    {{ world_data.world.name }}
+                                </a>
+                            </h2>
+                            <span
+                                class="bg-gray-700 text-blue-green text-xs font-semibold px-2 py-1 rounded"
+                            >
+                                {{ world_data.world.location or "Unknown" }}
+                            </span>
+                        </div>
+
+                        <div
+                            class="grid grid-cols-2 gap-4 text-sm text-gray-300 mb-4"
+                        >
+                            <div class="flex items-center">
+                                <i
+                                    class="fas fa-map-marker-alt mr-2 text-blue-green"
+                                ></i>
+                                <span>{{ world_data.spawn_count }} Spawns</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i
+                                    class="fas fa-users mr-2 text-blue-green"
+                                ></i>
+                                <span>{{ world_data.user_count }} Users</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-user mr-2 text-blue-green"></i>
+                                <span
+                                    >{{ world_data.character_count }}
+                                    Characters</span
+                                >
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-bolt mr-2 text-blue-green"></i>
+                                <span
+                                    >{{ world_data.active_users_count }}
+                                    Active</span
+                                >
+                            </div>
+                        </div>
+
+                        <a
+                            href="/worlds/{{ world_data.world.name }}"
+                            class="block w-full bg-reseda-green hover:bg-green-700 text-white text-center font-bold py-2 px-4 rounded transition-colors"
+                        >
+                            View World
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-8 text-center">
+                <a
+                    href="/dashboard"
+                    class="inline-block bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded transition-colors"
+                >
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </body>
+</html>
