@@ -1,11 +1,14 @@
+from enum import verify
 import hashlib
 import httpx
 from datetime import datetime
+from json import JSONDecodeError
 
 from fastapi import APIRouter, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import and_
 import logging
 
 
@@ -98,9 +101,9 @@ async def create_character(
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
-        tibia_level = character_info.get('level')
-        tibia_vocation = character_info.get('vocation')
-        tibia_world_name = character_info.get('world')
+        tibia_level = character_info['level']
+        tibia_vocation = character_info['vocation']
+        tibia_world_name = character_info['world']
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -302,8 +305,8 @@ async def get_verify_character_page(
     # Filter other characters that belong to the current user and are currently unvalidated
     other_characters_to_validate = []
     for other_char_info in tibia_other_characters:
-        other_char_name = other_char_info.get('name')
-        if other_char_name == character_name: # Skip the main character itself
+        other_char_name = other_char_info['name']
+        if other_char_name == character_name or other_char_info['world'] != character_to_verify.world.name: # Skip the main character itself
             continue
         logger.info(f"Processing other character: {other_char_name}")
         existing_other_char_in_db = db.query(Character).filter(
@@ -334,6 +337,89 @@ async def get_verify_character_page(
         }
     )
 
+def validated_characters_on_world(other_chars_list : list,world_name: int, db : Session):
+    logger.info(f"Other characters on world: {other_chars_list}")
+    names_list = [char["name"] for char in other_chars_list if char["world"] == world_name]
+    validated_in_database = db.query(Character.name).filter(
+            Character.validation_hash == None,
+            Character.name.in_(names_list)
+        ).all()
+    validated_names = [name[0] for name in validated_in_database]
+    return [name for name in names_list if name != "" and name not in validated_names]
+
+def verify_character(user : User, world : World, character_data : dict, db : Session):
+    character_name = character_data["name"]
+    character_level = character_data["level"]
+    character_vocation = character_data["vocation"]
+
+    character_in_db = db.query(Character).filter(
+            and_(Character.name == character_name, Character.user_id == user.id)
+        ).first()
+    if character_in_db and not character_in_db.validated:
+        character_in_db.validation_hash = None
+        db.commit()
+        db.refresh(character_in_db)
+    elif not character_in_db:
+        character_in_db = Character(name=character_name, world=world, level=character_level, vocation=character_vocation, user_id=user.id, validation_hash=None)
+        db.add(character_in_db)
+        db.commit()
+        db.refresh(character_in_db)
+    return character_in_db
+
+async def get_character_data(character_name: str):
+    """
+    Fetches character data from the TibiaData API.
+
+    Args:
+        character_name (str): The name of the Tibia character to search for.
+
+    Returns:
+        dict | None: A dictionary containing the character data if successful,
+                     otherwise None.
+    """
+    BASE_URL = "https://api.tibiadata.com/v4"
+    endpoint = f"/character/{character_name.replace(' ', '%20')}" # Replace spaces for URL
+    url = f"{BASE_URL}{endpoint}"
+
+    print(f"Attempting to fetch data for character: {character_name}")
+    print(f"API URL: {url}")
+
+    try:
+        # Use httpx.AsyncClient for asynchronous requests
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, follow_redirects=True, timeout=10.0)
+            response.raise_for_status()  # Raise an exception for 4xx or 5xx responses
+
+            # Parse the JSON response
+            data = response.json()
+
+            # TibiaData API often wraps actual data in 'characters' -> 'character'
+            if data and 'character' in data and 'character' in data['character']:
+                character_info = data['character']['character']
+                other_characters = data['character']['other_characters']
+                return character_info, other_characters
+            elif data and 'error' in data:
+                logger.error(f"API Error for {character_name}: {data['error']['message']}")
+                return None, data['error']['message']
+            else:
+                logger.warning(f"Unexpected response format for {character_name}: {data}")
+                return None, f"Unexpected response format for {character_name}: {data}"
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error occurred for {character_name}: {e.response.status_code} - {e.response.text}")
+        if e.response.status_code == 404:
+            logger.warning(f"Character '{character_name}' not found.")
+        return None, e.response.text
+    except httpx.RequestError as e:
+        logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
+        return None, f"An error occurred while requesting {e.request.url!r}: {e}"
+    except JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON from response for {character_name}.")
+        return None, str(e)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred for {character_name}: {e}")
+        return None, str(e)
+
 
 @router.post("/character/verify", response_class=HTMLResponse)
 async def validate_character(
@@ -346,209 +432,47 @@ async def validate_character(
     Fetches character comment from TibiaData.com and checks for the validation hash.
     If successful, marks the character and other associated characters as validated.
     """
-    logger.info(f"Validating character: {character_name}")
     user_id = request.session.get('user_id')
-    if not user_id:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
-        logger.info(f"User not found for ID: {user_id}")
-        logger.info("Redirecting to login page")
-        request.session.pop('user_id', None)
-        request.session.pop('username', None)
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url="/login")
 
-    character_to_validate = db.query(Character).filter(
-        Character.name == character_name,
-        Character.user_id == user.id,
-        Character.validation_hash.isnot(None) # Must be unverified to be validated
-    ).first()
+    # Verify Main Character
+    character_data, other_characters = await get_character_data(character_name)
 
-    if not character_to_validate:
-        logger.info("Character not found or already verified.")
-        logger.info("Redirecting to characters page")
+    if not character_data:
         return RedirectResponse(
-            url="/characters?error=Character not found or already verified.",
+            url=f"/character/verify?character_name={character_name}&error={other_characters}",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+    world = db.query(World).filter(World.name == character_data['world']).first()
+    character = verify_character(user, world, character_data, db)
+
+    if not character:
+        return RedirectResponse(
+            url=f"/character/verify?character_name={character_name}&error=an error happened verifying {character_name}",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
-    expected_hash = character_to_validate.validation_hash
-    tibia_character_comment = None
-    tibia_other_characters = []
-
-    # Fetch character details from TibiaData.com to get the comment and other characters
-    TIBIADATA_CHARACTER_API = f"https://api.tibiadata.com/v4/character/{character_name}"
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(TIBIADATA_CHARACTER_API)
-            response.raise_for_status()
-            tibia_data = response.json()
-
-        character_info = tibia_data.get('character', {}).get('character', {})
-        tibia_character_comment = character_info.get('comment')
-        tibia_other_characters = tibia_data.get('character', {}).get('other_characters', [])
-
-        logger.info("Fetched character details from TibiaData.com")
-
-    except httpx.HTTPStatusError as e:
-        error_message = f"Error fetching character data from Tibia.com: {e.response.status_code} - {e.response.text}"
-        logger.error(f"HTTP error fetching TibiaData for validation: {e}")
-        return RedirectResponse(
-            url=f"/character/verify?character_name={character_name}&error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-    except httpx.RequestError as e:
-        error_message = f"Network error connecting to Tibia.com: {e}"
-        logger.error(f"Network error fetching TibiaData for validation: {e}")
-        return RedirectResponse(
-            url=f"/character/verify?character_name={character_name}&error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-    except Exception as e:
-        error_message = f"An unexpected error occurred while fetching character data for validation: {e}"
-        logger.error(f"Error fetching TibiaData for validation: {e}")
-        return RedirectResponse(
-            url=f"/character/verify?character_name={character_name}&error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-
-    # Check if the validation hash is present in the Tibia.com character comment
-    if not tibia_character_comment or expected_hash not in tibia_character_comment:
-        error_message = "Validation hash not found in character comment. Please ensure it's correctly placed on Tibia.com."
-        logger.warning(f"Validation hash not found for character {character_name}")
-        logger.info(f"Comment: {tibia_character_comment}")
-        return RedirectResponse(
-            url=f"/character/verify?character_name={character_name}&error={error_message}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-
-    try:
-        # Mark the main character as validated
-        character_to_validate.validation_hash = None
-        db.add(character_to_validate)
-        db.flush() # Flush to ensure main character is updated before processing others
-
-        # Auto-validate other characters on the same account
-        auto_validated_chars_names = [character_to_validate.name] # Start with the main character
-        for other_char_info in tibia_other_characters:
-            other_char_name = other_char_info.get('name')
-
-            # Skip if it's the main character (already handled)
-            if other_char_name == character_to_validate.name:
+    if other_characters and len(other_characters) > 0:
+        logger.info(f"Processing {other_characters}")
+        other_char_data = None
+        for other_char_name in validated_characters_on_world(other_characters, character_data['world'], db):
+            other_char_data, _ = await get_character_data(other_char_name)
+            if not other_char_data:
+                logger.error(f"Failed to fetch data for character {other_char_name}")
                 continue
+            other_char_db = verify_character(user, world, other_char_data, db)
+            if not other_char_db:
+                logger.error(f"Failed to verify character {other_char_name}")
+                return RedirectResponse(
+                    url=f"/character/verify?character_name={character_name}&error=an error happened verifying {other_char_name}",
+                    status_code=status.HTTP_303_SEE_OTHER
+                )
 
-            # Fetch full details for the other character
-            other_char_level = None
-            other_char_vocation = None
-            other_char_world_name = None
-            other_char_last_login = None
+    return RedirectResponse(url="/characters", status_code=status.HTTP_303_SEE_OTHER)
 
-            TIBIADATA_OTHER_CHARACTER_API = f"https://api.tibiadata.com/v4/character/{other_char_name}"
-            try:
-                async with httpx.AsyncClient() as client:
-                    other_response = await client.get(TIBIADATA_OTHER_CHARACTER_API)
-                    other_response.raise_for_status()
-                    other_tibia_data = other_response.json()
-
-                other_character_info = other_tibia_data.get('character', {}).get('character', {})
-                if other_character_info:
-                    other_char_level = other_character_info.get('level')
-                    other_char_vocation = other_character_info.get('vocation')
-                    other_char_world_name = other_character_info.get('world')
-                    other_char_last_login_str = other_character_info.get('last_login')
-                    if other_char_last_login_str:
-                        other_char_last_login = datetime.fromisoformat(other_char_last_login_str.replace('Z', '+00:00'))
-                else:
-                    logger.warning(f"Could not fetch full details for other character: {other_char_name}")
-
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error fetching TibiaData for other character {other_char_name}: {e.response.status_code} - {e.response.text}")
-                continue # Skip to next character if API call fails
-            except httpx.RequestError as e:
-                logger.error(f"Network error fetching TibiaData for other character {other_char_name}: {e}")
-                continue # Skip to next character
-            except Exception as e:
-                logger.error(f"Unexpected error fetching TibiaData for other character {other_char_name}: {e}", exc_info=True)
-                continue # Skip to next character
-
-
-            # Find or create world for other character
-            other_world = None
-            if other_char_world_name:
-                other_world = db.query(World).filter(World.name == other_char_world_name).first()
-                if not other_world:
-                    other_world = World(name=other_char_world_name, location="Unknown")
-                    db.add(other_world)
-                    db.flush() # Flush to get ID for new world
-                    logger.info(f"Created new world entry for other character during validation: {other_world.name}")
-
-            # Check if this other character exists in our DB and belongs to the current user and is unvalidated
-            existing_other_char_in_db = db.query(Character).filter(
-                Character.name == other_char_name,
-                Character.user_id == user.id,
-                Character.validation_hash.isnot(None) # Only update if it's currently unvalidated
-            ).first()
-
-            if existing_other_char_in_db:
-                existing_other_char_in_db.validation_hash = None # Mark as validated
-                existing_other_char_in_db.verified = True # Set verified to True
-                existing_other_char_in_db.world_id = other_world.id if other_world else existing_other_char_in_db.world_id # Update world
-                existing_other_char_in_db.level = other_char_level # Update level
-                existing_other_char_in_db.vocation = other_char_vocation # Update vocation
-                existing_other_char_in_db.last_login = other_char_last_login # Update last_login
-                db.add(existing_other_char_in_db)
-                auto_validated_chars_names.append(other_char_name)
-                logger.info(f"Auto-validated existing character {other_char_name} for user {user.username}.")
-            else:
-                # If the other character is not in our DB, create it as validated for this user
-                # Only create if it's not owned by another user
-                already_owned_by_someone_else = db.query(Character).filter(
-                    Character.name == other_char_name,
-                    Character.user_id.isnot(None),
-                    Character.user_id != user.id
-                ).first()
-
-                if not already_owned_by_someone_else and other_world: # Ensure world is found/created
-                    new_other_character = Character(
-                        name=other_char_name,
-                        level=other_char_level,
-                        vocation=other_char_vocation,
-                        user_id=user.id,
-                        world_id=other_world.id,
-                        validation_hash=None, # Automatically validated
-                        last_login=other_char_last_login
-                    )
-                    db.add(new_other_character)
-                    auto_validated_chars_names.append(other_char_name)
-                    logger.info(f"Auto-created and validated new character {other_char_name} for user {user.username}.")
-                elif already_owned_by_someone_else:
-                    logger.info(f"Skipping auto-validation for {other_char_name} as it's already owned by another user.")
-                else:
-                    logger.warning(f"Skipping auto-validation for {other_char_name} due to missing world information.")
-
-        db.commit() # Commit all changes in one transaction
-
-        message_text = f"Character '{character_name}' and associated characters ({', '.join(auto_validated_chars_names)}) have been successfully verified!"
-        logger.info(f"User {user.username} successfully validated {character_name} and auto-validated: {auto_validated_chars_names}")
-        return RedirectResponse(
-            url=f"/characters?message={message_text}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-
-    except IntegrityError as e:
-        db.rollback()
-        error_message = f"Database error during validation: {e}"
-        logger.error(f"Integrity Error during character validation for {character_name}: {e}")
-    except Exception as e:
-        db.rollback()
-        error_message = f"An unexpected error occurred during character validation: {e}"
-        logger.error(f"Unexpected error during character validation for {character_name}: {e}", exc_info=True)
-
-    return RedirectResponse(
-        url=f"/character/verify?character_name={character_name}&error={error_message}",
-        status_code=status.HTTP_303_SEE_OTHER
-    )
 
 
 @router.get("/character/disown", response_class=HTMLResponse)
