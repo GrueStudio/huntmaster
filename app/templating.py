@@ -37,21 +37,16 @@ def durationformat(value: timedelta):
     hours = total_seconds // 3600
     total_seconds %= 3600
     minutes = total_seconds // 60
-    seconds = total_seconds % 60
 
     parts = []
     if days > 0:
-        parts.append(f"{days} day{'s' if days != 1 else ''}")
+        parts.append(f"{days}d")
     if hours > 0:
-        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        parts.append(f"{hours}h")
     if minutes > 0:
-        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
-    if seconds > 0 or not parts: # Include seconds if there's nothing else, or if it's 0 seconds
-        if not parts and seconds == 0: # Handle timedelta(0)
-                return "0 minutes" # Or "0 seconds", depends on desired granularity
-        parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+        parts.append(f"{minutes}m")
 
-    return " ".join(parts) if parts else "0 minutes" # Default for empty timedelta
+    return " ".join(parts) if parts else "&infin;" # Default for empty timedelta
 
 # Filter to format duration in minutes to Hh:Mm
 def format_duration(minutes: int) -> str:

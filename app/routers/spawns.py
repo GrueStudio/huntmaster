@@ -750,3 +750,68 @@ async def post_propose_spawn_change(
             url=f"/worlds/{world.name}/spawns/{spawn.name}/propose?error={error_message}",
             status_code=status.HTTP_303_SEE_OTHER
         )
+
+
+@router.post("/worlds/{world_name}/spawns/{spawn_name}/favourite", response_class=JSONResponse)
+async def toggle_spawn_favourite(
+    request: Request,
+    world_name: str,
+    spawn_name: str,
+    action: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Adds or removes a spawn from the logged-in user's favourites based on the
+    provided action. This endpoint expects 'add' or 'remove' as the action
+    in the form data, aligning with the `updateFavouritesOnServer` JavaScript function.
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "You must be logged in to favourite a spawn."}
+        )
+
+    # Eagerly load the favourite_spawns relationship to avoid extra queries
+    user = db.query(User).options(joinedload(User.favourite_spawns)).filter(User.id == user_id).first()
+    if not user:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "User not found."}
+        )
+
+    # Find the spawn using a case-insensitive search, ensuring it belongs to the correct world
+    spawn = db.query(Spawn).join(World).filter(
+        func.lower(World.name) == world_name.lower(),
+        func.lower(Spawn.name) == spawn_name.lower()
+    ).first()
+
+    if not spawn:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "Spawn not found in this world."}
+        )
+
+    is_favorited: bool
+    message: str
+
+    if action == "add":
+        if spawn not in user.favourite_spawns:
+            user.favourite_spawns.append(spawn)
+            message = f"'{spawn.name}' has been added to your favourites."
+        else:
+            message = f"'{spawn.name}' is already in your favourites."
+        is_favorited = True
+    elif action == "remove":
+        if spawn in user.favourite_spawns:
+            user.favourite_spawns.remove(spawn)
+            message = f"'{spawn.name}' has been removed from your favourites."
+        else:
+            message = f"'{spawn.name}' is not in your favourites."
+        is_favorited = False
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": "Invalid action. Must be 'add' or 'remove'."}
+        )
+    logger.info(message)

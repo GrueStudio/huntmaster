@@ -89,35 +89,59 @@
                 }
             }
 
-            /**
-             * Formats a given number of minutes into a human-readable duration string.
-             * This client-side function mirrors the server-side Jinja `timedeltaformat` filter
-             * for consistency and potential client-side calculations/updates.
-             * @param {number} minutes - The total number of minutes to format.
-             * @returns {string} - The formatted duration string (e.g., "1d 2h 30m" or "0m").
-             */
-            function timedeltaformat(minutes) {
-                if (minutes === null || typeof minutes === 'undefined') return "N/A";
-                minutes = parseInt(minutes);
-                if (isNaN(minutes)) return "Invalid Time";
-                if (minutes < 0) return "Negative Time";
+            let favourited_ids = {{ favorited_spawn_ids | tojson | safe }};
 
-                const days = Math.floor(minutes / (24 * 60));
-                minutes %= (24 * 60);
-                const hours = Math.floor(minutes / 60);
-                minutes %= 60;
+            function toggleFavourite(button) {
+                let spawnId = button.dataset.spawnId;
+                let spawnName = button.dataset.spawnName
+                let icon = button.querySelector('i');
+                let isFavourited = favourited_ids.includes(parseInt(spawnId));
 
-                let parts = [];
-                if (days > 0) {
-                    parts.push(`${days}d`);
-                }
-                if (hours > 0) {
-                    parts.push(`${hours}h`);
-                }
-                if (minutes > 0 || (days === 0 && hours === 0 && minutes === 0)) { // Ensure "0m" is shown for zero duration
-                    parts.push(`${minutes}m`);
-                }
-                return parts.join(' ') || '0m';
+                // Toggle the favourite status
+                showToggle(isFavourited, spawnId, icon)
+
+                // Send update to server
+                updateFavouritesOnServer(spawnId, spawnName, !isFavourited, icon);
+            }
+
+            function showToggle(isFavourited, spawnId, icon) {
+              if (isFavourited) {
+                  // Remove from favourites
+                  favourited_ids = favourited_ids.filter(id => id !== parseInt(spawnId));
+                  icon.classList.remove('fas', 'text-yellow-400');
+                  icon.classList.add('far', 'text-gray-400');
+              } else {
+                  // Add to favourites
+                  favourited_ids.push(parseInt(spawnId));
+                  icon.classList.remove('far', 'text-gray-400');
+                  icon.classList.add('fas', 'text-yellow-400');
+              }
+            }
+
+            function updateFavouritesOnServer(spawnId, spawnName, isFavourited, icon) {
+                // Create FormData object
+                const formData = new FormData();
+                formData.append('action', isFavourited ? 'add' : 'remove');
+
+                // Encode the spawnName for URL (spaces become %20)
+                const encodedSpawnName = encodeURIComponent(spawnName);
+
+                fetch(`/worlds/{{ world.name }}/spawns/${encodedSpawnName}/favourite`, {
+                    method: 'POST',
+                    body: formData  // FormData will set appropriate headers automatically
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update favourites');
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // You might want to show a user-friendly error message here
+                    // e.g., display a toast notification or update the UI
+                    showToggle(isFavourited, spawnId, icon)
+                });
             }
 
             /**
@@ -468,12 +492,15 @@
                     level or enter a level.
                 </p>
             </div>
-            <div class="bg-gray-700 p-4 rounded-md mb-6">
+            <div class="bg-gray-700 p-1 rounded-md">
                 {% if spawns %}
-                <ul class="space-y-3" id="existing-spawn-list">
-                    {% for spawn in spawns %} {# Call the spawn_card macro with
-                    relevant data #} {{ spawn_card(spawn, world) }} {% endfor %}
-                </ul>
+                <!-- Grid container with responsive columns -->
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto"
+                >
+                    {% for spawn in spawns %} {{ spawn_card(spawn, world) }} {%
+                    endfor %}
+                </div>
                 {% else %}
                 <p class="text-gray-300">No existing spawns for this world.</p>
                 {% endif %}
