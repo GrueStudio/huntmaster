@@ -1,0 +1,237 @@
+{#
+This macro creates the main page layout, including a responsive, collapsible sidebar
+and a sticky top navigation bar. It's designed to be the foundation for all pages
+on the site, ensuring a consistent look and feel.
+
+Args:
+    title (str): The title of the page, used in the <title> tag. This will still be used for the browser tab title.
+    current_user (User): The currently logged-in user object.
+    breadcrumbs (list): A list of dictionaries, where each dict has 'text' and 'link' keys, for breadcrumb navigation.
+    caller (Jinja2 caller): This special argument allows the content of the calling
+                            template to be injected into the main content area of this layout.
+#}\
+{% macro layout(title, current_user=None, breadcrumbs=[]) %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title }} - HuntMaster</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" xintegrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /* Custom scrollbar for a more modern look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #2d3748; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+        body { font-family: 'Inter', sans-serif; background-color: #1a202c; }
+
+        /* CRITICAL: Styles for collapsed sidebar to prevent FOUC */
+        .sidebar-collapsed #sidebar {
+            width: 5rem;
+        }
+        .sidebar-collapsed #sidebar .fa-chevron-left {
+            transform: rotate(180deg);
+        }
+        .sidebar-collapsed #sidebar .px-6,
+        .sidebar-collapsed #sidebar .px-4 {
+            padding-left: 1.25rem;
+            padding-right: 1.25rem;
+        }
+        .sidebar-collapsed #sidebar .text-2xl,
+        .sidebar-collapsed #sidebar h3,
+        .sidebar-collapsed #sidebar .font-medium {
+            opacity: 0;
+            width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            transition: opacity 0.2s ease-out, width 0.2s ease-out; /* Keep transition for smooth hover */
+        }
+        .sidebar-collapsed #sidebar .gap-2\.5 {
+            justify-content: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+    <script>
+        // This script runs synchronously and early to prevent FOUC (Flash Of Unstyled Content)
+        // It checks localStorage for the collapsed state and applies the class to the body
+        // before the main layout.js script loads, ensuring the sidebar renders
+        // in its collapsed state initially if desired.
+        if (localStorage.getItem('sidebarCollapsed') === 'true' && window.innerWidth >= 1024) {
+            document.body.classList.add('sidebar-collapsed');
+        }
+    </script>
+    <!--
+        CRITICAL FIX: Added 'flex' and 'flex-row' directly to app-container.
+        This ensures the main layout is correctly set up as a flexbox row from the start,
+        preventing the content from appearing below the sidebar.
+        Removed 'overflow-hidden' to allow scrolling on the page.
+    -->
+    <div id="app-container" class="relative flex h-screen flex-row">
+        <!-- ===== Sidebar Start ===== -->
+        {#
+            Changed sidebar height from h-screen to h-full for desktop (lg:h-full).
+            This allows it to stretch to the full height of its flex parent (#app-container),
+            which itself is h-screen. This makes the sidebar's background appear to extend
+            with the content, while its own overflow-y-auto handles its internal scrolling.
+        #}
+        <aside id="sidebar" class="fixed left-0 top-0 z-50 flex h-screen w-72 flex-col overflow-y-auto bg-gray-800 shadow-lg duration-300 ease-linear lg:static lg:h-full lg:translate-x-0 -translate-x-full">
+            <!-- Sidebar Header -->
+            <div class="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5">
+                <a href="/" class="text-2xl font-bold text-white">
+                    <i class="fas fa-crosshairs mr-2 text-blue-400"></i> HuntMaster
+                </a>
+                <!-- Desktop Sidebar Toggle -->
+                <button id="sidebar-toggle-desktop" class="hidden lg:block text-gray-400 hover:text-white">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+
+            <!-- Sidebar Menu -->
+            <div class="flex flex-col overflow-y-auto duration-300 ease-linear">
+                <nav class="mt-5 py-4 px-4 lg:px-6">
+                    <div>
+                        <h3 class="mb-4 ml-4 text-sm font-semibold text-gray-400">MENU</h3>
+                        <ul class="mb-6 flex flex-col gap-1.5">
+                            <!-- Dashboard Link -->
+                            <li>
+                                <a href="/dashboard" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-gray-300 duration-300 ease-in-out hover:bg-gray-700">
+                                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                                </a>
+                            </li>
+                            <!-- Character Management Link -->
+                            <li>
+                                <a href="/characters" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-gray-300 duration-300 ease-in-out hover:bg-gray-700">
+                                    <i class="fas fa-users"></i> Character Management
+                                </a>
+                            </li>
+                            <!-- Team Organizer (Placeholder) -->
+                            <li>
+                                <a href="#" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-gray-300 duration-300 ease-in-out hover:bg-gray-700 opacity-50 cursor-not-allowed">
+                                    <i class="fas fa-sitemap"></i> Team Organizer <span class="text-xs ml-2">(Soon)</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    {% if current_user %}
+                    <div>
+                        <h3 class="mb-4 ml-4 text-sm font-semibold text-gray-400">YOUR WORLDS</h3>
+                        <ul class="mb-6 flex flex-col gap-1.5">
+                            {% set user_worlds = [] %}
+                            {% for char in current_user.characters %}
+                                {% if char.world and char.world.name not in user_worlds %}
+                                    {% if user_worlds.append(char.world.name) %}{% endif %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% for world_name in user_worlds %}
+                            <li>
+                                <a href="/worlds/{{ world_name | urlencode }}" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-gray-300 duration-300 ease-in-out hover:bg-gray-700">
+                                    <i class="fas fa-globe-americas"></i> {{ world_name }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                             <li>
+                                <a href="/worlds" class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-gray-400 duration-300 ease-in-out hover:bg-gray-700 border-t border-gray-700 mt-2 pt-2">
+                                    <i class="fas fa-search-location"></i> Browse All Worlds
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                </nav>
+            </div>
+        </aside>
+        <!-- ===== Sidebar End ===== -->
+
+        <!-- ===== Content Area Start ===== -->
+        <div id="content-area" class="relative flex flex-1 flex-col duration-300 ease-linear">
+            <!-- ===== Header Start ===== -->
+            <header class="sticky top-0 z-40 flex w-full bg-gray-800 shadow-md">
+                <div class="flex flex-grow items-center justify-between py-4 px-4 md:px-6 2xl:px-11">
+                    <!-- Mobile Sidebar Toggle -->
+                    <div class="flex items-center gap-2 sm:gap-4 lg:hidden">
+                        <button id="sidebar-toggle-mobile" aria-controls="sidebar" class="z-50 block rounded-sm border border-gray-600 bg-gray-700 p-1.5 shadow-sm lg:hidden">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                        <a href="/" class="text-xl font-bold text-white block lg:hidden">
+                             <i class="fas fa-crosshairs text-blue-400"></i>
+                        </a>
+                    </div>
+
+                    <!-- Breadcrumb Container - Debugging border and flex-grow added -->
+                    <div class="flex-grow">
+                        <nav class="flex" aria-label="Breadcrumb">
+                            <ol class="inline-flex items-center space-x-1 md:space-x-2 rtl:space-x-reverse">
+                                {% for crumb in breadcrumbs %}
+                                    <li class="inline-flex items-center">
+                                        {# Display text with capitalized words #}
+                                        {% set display_text = crumb.text | title %}
+                                        {# Render as plain text (bolded) if it's the last item OR if link is None #}
+                                        {% if loop.last or crumb.link is none %}
+                                            <span class="text-white text-sm font-medium font-bold">
+                                                {{ display_text }}
+                                            </span>
+                                        {% else %}
+                                            <a href="{{ crumb.link }}" class="inline-flex items-center text-sm font-medium text-gray-400 hover:text-blue-400">
+                                                {{ display_text }}
+                                            </a>
+                                            <svg class="rtl:rotate-180 w-3 h-3 text-gray-500 mx-1" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 6 10">
+                                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 9 4-4-4-4"/>
+                                            </svg>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ol>
+                        </nav>
+                    </div>
+
+                    <div class="flex items-center gap-3 2xsm:gap-7">
+                        <!-- User Account Menu -->
+                        {% if current_user %}
+                        <div class="relative">
+                            <a href="/profile" class="flex items-center gap-4">
+                                <span class="hidden text-right lg:block">
+                                    <span class="block text-sm font-medium text-white">{{ current_user.username }}</span>
+                                    <span class="block text-xs text-gray-400">View Profile</span>
+                                </span>
+                                <span class="h-12 w-12 rounded-full bg-gray-700 flex items-center justify-center">
+                                    <i class="fas fa-user text-xl text-gray-300"></i>
+                                </span>
+                            </a>
+                        </div>
+                        <a href="/logout" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition">Logout</a>
+                        {% else %}
+                        <a href="/login" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition">Login</a>
+                        <a href="/register" class="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 transition">Register</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+            <!-- ===== Header End ===== -->
+
+            <!-- ===== Main Content Start ===== -->
+            {# Added flex-1 and overflow-y-auto to the main tag to make it scrollable #}
+            <main class="flex-1 overflow-y-auto">
+                <div class="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+                    {# The content from the calling template will be inserted here #}
+                    {{ caller() }}
+                </div>
+            </main>
+            <!-- ===== Main Content End ===== -->
+        </div>
+        <!-- ===== Content Area End ===== -->
+    </div>
+
+    <!-- Sidebar overlay for mobile -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden"></div>
+
+    <script src="/static/js/layout.js"></script>
+</body>
+</html>
+{% endmacro %}

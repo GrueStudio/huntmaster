@@ -1,526 +1,272 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>World: {{ world.name }} - HuntMaster</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
-        <link
-            rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
-        />
-        <style>
-            body {
-                font-family: "Inter", sans-serif;
-                background-color: #1c1c1c; /* eerie-black */
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                min-height: 100vh;
-                padding: 1rem;
-                color: #e2e8f0; /* Light text color for card content */
-            }
-            .card-link {
-                display: block; /* Make the anchor tag a block element */
-                background-color: #2d3748; /* Darker card background */
-                border-radius: 0.75rem;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                padding: 1.5rem;
-                margin-bottom: 1.5rem;
-                max-width: 400px;
-                width: 100%;
-                text-decoration: none; /* Remove underline from the link */
-                color: inherit; /* Inherit text color from parent */
-                transition:
-                    background-color 0.2s ease-in-out,
-                    transform 0.2s ease-in-out;
-            }
-            .card-link:hover {
-                background-color: #3b4d63; /* Slightly lighter on hover */
-                transform: translateY(-3px); /* Subtle lift effect */
-            }
-            .card-icon {
-                color: #90cdf4; /* Light blue for icons */
-                width: 1.25rem; /* Ensure consistent icon size */
-                text-align: center;
-            }
-            .card {
-                background-color: #2d3748; /* Darker card background */
-                border-radius: 0.75rem;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                padding: 1.5rem;
-                margin-bottom: 1.5rem;
-                width: 100%;
-            }
-            .btn-primary {
-                background-color: #3b82f6;
-                color: white;
-                padding: 0.6rem 1.2rem;
-                border-radius: 0.5rem;
-                font-weight: 600;
-                transition: background-color 0.2s ease-in-out;
-                border: none;
-                cursor: pointer;
-            }
-            .btn-primary:hover {
-                background-color: #2563eb;
-            }
-        </style>
-        <script>
-            // Configure Tailwind CSS for custom colors and fonts
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            'coyote': '#866533',
-                            'reseda-green': '#5c6c4b',
-                            'caput-mortuum': '#6a2824',
-                            'blue-green': '#28a1cc',
-                            'eerie-black': '#1c1c1c',
-                        },
-                        fontFamily: {
-                            inter: ['Inter', 'sans-serif'],
-                        },
-                    }
-                }
-            }
+{% from 'macros/_layout.html' import layout %} {% from
+'macros/_spawn_proposal_card.html' import spawn_proposal_card %} {% from
+'macros/_spawn_card.html' import spawn_card %} {# The 'current_user' object must
+be passed from your FastAPI endpoint to the template. I'm assuming it's
+available as 'current_user'. If not, adjust the variable name. #} {% call
+layout(title='World: ' + world.name, current_user=current_user,
+breadcrumbs=breadcrumbs) %}
 
-            let favourited_ids = {{ favorited_spawn_ids | tojson | safe }};
+<div id="message-container" class="mb-4">
+    {# This div will be used by JavaScript to display messages. #}
+</div>
 
-            function toggleFavourite(button) {
-                let spawnId = button.dataset.spawnId;
-                let spawnName = button.dataset.spawnName
-                let icon = button.querySelector('i');
-                let isFavourited = favourited_ids.includes(parseInt(spawnId));
-
-                // Toggle the favourite status
-                showToggle(isFavourited, spawnId, icon)
-
-                // Send update to server
-                updateFavouritesOnServer(spawnId, spawnName, !isFavourited, icon);
-            }
-
-            function showToggle(isFavourited, spawnId, icon) {
-              if (isFavourited) {
-                  // Remove from favourites
-                  favourited_ids = favourited_ids.filter(id => id !== parseInt(spawnId));
-                  icon.classList.remove('fas', 'text-yellow-400');
-                  icon.classList.add('far', 'text-gray-400');
-              } else {
-                  // Add to favourites
-                  favourited_ids.push(parseInt(spawnId));
-                  icon.classList.remove('far', 'text-gray-400');
-                  icon.classList.add('fas', 'text-yellow-400');
-              }
-            }
-
-            function updateFavouritesOnServer(spawnId, spawnName, isFavourited, icon) {
-                // Create FormData object
-                const formData = new FormData();
-                formData.append('action', isFavourited ? 'add' : 'remove');
-
-                // Encode the spawnName for URL (spaces become %20)
-                const encodedSpawnName = encodeURIComponent(spawnName);
-
-                fetch(`/worlds/{{ world.name }}/spawns/${encodedSpawnName}/favourite`, {
-                    method: 'POST',
-                    body: formData  // FormData will set appropriate headers automatically
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to update favourites');
-                    }
-                    return response.json();
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    // You might want to show a user-friendly error message here
-                    // e.g., display a toast notification or update the UI
-                    showToggle(isFavourited, spawnId, icon)
-                });
-            }
-
-            /**
-             * Displays a temporary message (success or error) to the user.
-             * The message appears in a designated container and fades after 5 seconds.
-             * @param {string} msg - The text content of the message.
-             * @param {'success'|'error'} type - The type of message, which determines its background color.
-             */
-            function showMessage(msg, type) {
-                const messageContainer = document.getElementById('message-container');
-                if (messageContainer) {
-                    // Clear any existing messages to ensure only one is visible at a time
-                    messageContainer.innerHTML = '';
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = `${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white p-3 rounded-md mb-4 text-center`;
-                    messageDiv.textContent = msg;
-                    messageDiv.style.opacity = '0'; // Start invisible for fade-in
-                    messageDiv.style.transition = 'opacity 0.5s ease-in-out';
-                    messageContainer.appendChild(messageDiv);
-
-                    // Trigger fade-in
-                    setTimeout(() => messageDiv.style.opacity = '1', 10);
-
-                    // Set a timeout to clear the message after 5 seconds
-                    setTimeout(() => {
-                        messageDiv.style.opacity = '0'; // Fade out
-                        messageDiv.addEventListener('transitionend', () => messageDiv.remove(), {once: true}); // Remove after fade out
-                    }, 5000);
-                }
-            }
-
-            /**
-             * Handles the sponsorship action for a spawn proposal.
-             * Extracts proposal ID and world name from the button's data attributes.
-             * Makes an AJAX request to the server. If a new spawn is created as a result
-             * of the sponsorship, the page is reloaded. Otherwise, the UI of the proposal
-             * card is updated to reflect the sponsorship status (e.g., sponsor count,
-             * button state).
-             * @param {HTMLElement} buttonElement - The button element that triggered the function.
-             */
-            async function handleSponsorClick(buttonElement) {
-                // Extract data attributes from the clicked button
-                const proposalId = buttonElement.dataset.proposalId;
-                const worldName = buttonElement.dataset.worldName;
-
-                // Ensure the user is logged in before attempting sponsorship.
-                // `logged_in_user_id` is a Jinja variable injected by the server.
-                if (!{{ logged_in_user_id | default('null') }}) {
-                    showMessage("You must be logged in to sponsor a proposal.", 'error');
-                    return;
-                }
-
-                // Optionally disable the button to prevent multiple clicks during the request
-                buttonElement.disabled = true;
-                buttonElement.textContent = "Sponsoring...";
-                buttonElement.classList.add('opacity-50', 'cursor-wait');
-
-                try {
-                    const response = await fetch(`/worlds/${worldName}/sponsor`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest' // Indicates an AJAX request
-                        },
-                        body: `proposal_id=${proposalId}` // Send the proposal ID in the request body
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        showMessage(`${data.message}`, 'success');
-
-                        // If the backend indicates a new spawn was created, reload the page.
-                        // This ensures the Spawns list is up-to-date.
-                        if (data.spawn_created) {
-                            window.location.reload();
-                        } else {
-                            // If no spawn was created (e.g., proposal just got more sponsors),
-                            // update the proposal card's UI dynamically.
-                            const sponsorIconContainer = document.getElementById(`sponsor-icon-${proposalId}`);
-                            const sponsorCountSpan = document.getElementById(`sponsor-count-${proposalId}`);
-
-                            // Update the sponsor count displayed on the card
-                            if (sponsorCountSpan && typeof data.num_sponsors !== 'undefined' && typeof data.min_sponsors_required !== 'undefined') {
-                                sponsorCountSpan.textContent = `${data.num_sponsors}/${data.min_sponsors_required}`;
-                            }
-                            // Change the lightning bolt icon to indicate sponsorship
-                            if (sponsorIconContainer) {
-                                // Assuming the icon container is already within the macro and we just update its content
-                                // This assumes the icon for 'sponsored by user' is a filled bolt
-                                sponsorIconContainer.innerHTML = `
-                                    <i class="fas fa-bolt card-icon text-blue-green mr-1" title="You have sponsored this proposal."></i>
-                                `;
-                            }
-                            // Disable the sponsor button and change its appearance permanently
-                            buttonElement.textContent = "Sponsored";
-                            buttonElement.classList.remove('bg-blue-green', 'hover:bg-blue-700', 'opacity-50', 'cursor-wait');
-                            buttonElement.classList.add('bg-gray-500', 'cursor-not-allowed');
-                        }
-                    } else {
-                        // Handle errors returned from the server (e.g., validation errors)
-                        const errorData = await response.json();
-                        showMessage(`Error: ${errorData.detail || 'Could not sponsor proposal.'}`, 'error');
-                        // Re-enable button and reset text on error
-                        buttonElement.disabled = false;
-                        buttonElement.textContent = "Sponsor Proposal";
-                        buttonElement.classList.remove('opacity-50', 'cursor-wait');
-                        buttonElement.classList.add('bg-blue-green', 'hover:bg-blue-700');
-                    }
-                } catch (error) {
-                    // Handle network errors or issues with the fetch request
-                    console.error('Fetch error:', error);
-                    showMessage('Network error or server unreachable.', 'error');
-                    // Re-enable button and reset text on network error
-                    buttonElement.disabled = false;
-                    buttonElement.textContent = "Sponsor Proposal";
-                    buttonElement.classList.remove('opacity-50', 'cursor-wait');
-                    buttonElement.classList.add('bg-blue-green', 'hover:bg-blue-700');
-                }
-            }
-
-            /**
-             * Toggles the favorite status of a spawn for the currently logged-in user.
-             * Sends an AJAX request to the server and updates the star icon on the spawn card.
-             * @param {string} spawnName - The name of the spawn to favorite or unfavorite.
-             * @param {string} worldName - The name of the world the spawn belongs to.
-             * @param {HTMLElement} iconElement - The icon element that triggered the function (the star icon).
-             */
-            async function toggleFavorite(spawnName, worldName, iconElement) {
-                // Ensure the user is logged in before attempting to favorite/unfavorite.
-                if (!{{ logged_in_user_id | default('null') }}) {
-                    showMessage("You must be logged in to favorite a spawn.", 'error');
-                    return;
-                }
-
-                // Temporarily indicate loading or disable interaction
-                iconElement.classList.add('opacity-50', 'cursor-wait');
-
-                try {
-                    const response = await fetch(`/worlds/${worldName}/spawns/${spawnName}/favourite`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest' // Indicates an AJAX request
-                        },
-                        body: '' // No specific body content needed for a toggle action
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        showMessage(`${data.message}`, 'success');
-
-                        // Find the favorite icon element for the specific spawn
-                        const favoriteIcon = document.getElementById(`favorite-icon-${spawnName}`);
-                        if (favoriteIcon) {
-                            if (data.is_favorited) { // Check the boolean status returned by the backend
-                                // If favorited, display a filled yellow star icon
-                                favoriteIcon.innerHTML = `
-                                    <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
-                                    </svg>
-                                `;
-                            } else {
-                                // If unfavorited, display an outlined gray star icon
-                                favoriteIcon.innerHTML = `
-                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.538-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.462a1 1 0 00.95-.69l1.07-3.292z"></path>
-                                    </svg>
-                                `;
-                            }
-                        }
-
-                    } else {
-                        // Handle errors from the server when toggling favorite status
-                        const errorData = await response.json();
-                        showMessage(`Error: ${errorData.detail || 'Could not toggle favorite.'}`, 'error');
-                    }
-                } catch (error) {
-                    // Handle network errors or issues with the fetch request
-                    console.error('Fetch error:', error);
-                    showMessage('Network error or server unreachable.', 'error');
-                } finally {
-                    // Re-enable icon interaction
-                    iconElement.classList.remove('opacity-50', 'cursor-wait');
-                }
-            }
-
-
-            /**
-             * Filters the list of existing spawns based on user input in the search bar
-             * and the character level filter. Spawns are hidden if they don't match
-             * the search text or the specified level range.
-             */
-            function filterSpawns() {
-                const searchText = document.getElementById('spawn-search').value.toLowerCase();
-                const levelFilterElement = document.getElementById('level-filter');
-                let levelFilter = null;
-
-                // Determine the level filter based on whether it's an input or a select
-                if (levelFilterElement.tagName === 'SELECT') {
-                    // If a character is selected, use their level; otherwise, it's 'No User Selected' or empty
-                    const selectedOptionValue = levelFilterElement.value;
-                    if (selectedOptionValue && selectedOptionValue !== 'no_user') {
-                        levelFilter = parseInt(selectedOptionValue);
-                    }
-                } else { // It's an input type="number"
-                    const inputValue = levelFilterElement.value;
-                    if (inputValue) {
-                        levelFilter = parseInt(inputValue);
-                    }
-                }
-
-                const spawnList = document.getElementById('existing-spawn-list');
-                // Get all list items which represent individual spawn cards
-                const spawns = spawnList.getElementsByTagName('li');
-
-                for (let i = 0; i < spawns.length; i++) {
-                    const spawn = spawns[i];
-                    // Retrieve spawn name and level range from the card's data attributes
-                    const spawnName = spawn.dataset.spawnName; // Already lowercased from macro
-                    const spawnMinLevel = parseInt(spawn.dataset.minLevel);
-                    const spawnMaxLevel = parseInt(spawn.dataset.maxLevel);
-
-                    let show = true; // Flag to determine if the spawn should be shown
-
-                    // Apply filter by name: hide if search text is provided and doesn't match
-                    if (searchText && !spawnName.includes(searchText)) {
-                        show = false;
-                    }
-
-                    // Apply filter by level: hide if a valid level filter is provided and
-                    // the spawn's level range does not include the filter level.
-                    if (levelFilter !== null && !isNaN(levelFilter)) {
-                        if (levelFilter < spawnMinLevel || levelFilter > spawnMaxLevel) {
-                            show = false;
-                        }
-                    }
-
-                    // Set the display style based on the 'show' flag
-                    spawn.style.display = show ? '' : 'none';
-                }
-            }
-        </script>
-    </head>
-    <body
-        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
-    >
-        {# Import macros from separate files #} {% from
-        'macros/_spawn_proposal_card.html' import spawn_proposal_card %} {% from
-        'macros/_spawn_card.html' import spawn_card %}
-
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-4xl">
-            <h1 class="text-3xl font-bold text-white mb-4">
-                World: <span class="text-blue-green">{{ world.name }}</span>
+<div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full">
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-white">
+                World: <span class="text-blue-400">{{ world.name }}</span>
             </h1>
-            <p class="text-lg text-gray-300 mb-6">
+            <p class="text-lg text-gray-400 mt-1">
                 Location: {{ world.location }}
             </p>
-
-            <div id="message-container">
-                {# This div will be used by JavaScript to display messages. #}
-                {# It also serves as a placeholder for FastAPI flash messages if
-                implemented. #} {% if message %}
-                <div
-                    class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
-                >
-                    {{ message }}
-                </div>
-                {% endif %} {% if error %}
-                <div
-                    class="bg-red-500 text-white p-3 rounded-md mb-4 text-center"
-                >
-                    {{ error }}
-                </div>
-                {% endif %}
-            </div>
-
-            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
-                Statistics
-            </h2>
-            <div class="bg-gray-700 p-4 rounded-md mb-6">
-                <p>Unique Users: {{ unique_users_count }}</p>
-                <p>Total Characters: {{ total_characters_count }}</p>
-            </div>
-
-            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
-                Proposals
-            </h2>
-            <div
-                class="bg-gray-700 p-4 rounded-md mb-6 max-h-60 overflow-y-auto"
-            >
-                {% if pending_spawn_proposals %}
-                <ul class="space-y-3">
-                    {% for proposal in pending_spawn_proposals %} {# Call the
-                    spawn_proposal_card macro with relevant data #} {{
-                    spawn_proposal_card(proposal, world, min_sponsors_required)
-                    }} {% endfor %}
-                </ul>
-                {% else %}
-                <p class="text-gray-300">
-                    No pending spawn proposals for this world.
-                </p>
-                {% endif %}
-            </div>
+        </div>
+        <div class="text-right mt-4 md:mt-0">
             <a
                 href="/worlds/{{ world.name }}/propose"
-                class="text-center inline-block mt-4 bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+                class="btn-primary bg-green-600 hover:bg-green-700"
             >
-                Propose New Spawn
+                <i class="fas fa-plus mr-2"></i>Propose New Spawn
             </a>
-            <h2 class="text-2xl font-semibold text-white mb-4 text-center">
-                Spawns
-            </h2>
-            <div class="mb-4">
-                <div class="flex flex-col sm:flex-row gap-2 mb-2">
-                    <input
-                        type="text"
-                        id="spawn-search"
-                        onkeyup="filterSpawns()"
-                        placeholder="Search spawn by name..."
-                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                    {% if logged_in_user and logged_in_user.characters_on_world
-                    %}
-                    <select
-                        id="level-filter"
-                        onchange="filterSpawns()"
-                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                    >
-                        <option value="no_user">No Character Selected</option>
-                        {% for character in characters_on_world %}
-                        <option value="{{ character.level }}">
-                            {{ character.name }} (Level {{ character.level }})
-                        </option>
-                        {% endfor %}
-                    </select>
-                    {% else %}
-                    <input
-                        type="number"
-                        id="level-filter"
-                        onkeyup="filterSpawns()"
-                        placeholder="Filter by character level..."
-                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                    {% endif %}
-                </div>
-                <p class="text-gray-400 text-xs mt-1">
-                    Search by spawn name and filter by a specific character's
-                    level or enter a level.
-                </p>
-            </div>
-            <div class="bg-gray-700 p-1 rounded-md">
-                {% if spawns %}
-                <!-- Grid container with responsive columns -->
-                <div
-                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto"
-                >
-                    {% for spawn in spawns %} {{ spawn_card(spawn, world) }} {%
-                    endfor %}
-                </div>
-                {% else %}
-                <p class="text-gray-300">No existing spawns for this world.</p>
-                {% endif %}
-            </div>
-
-            <div class="text-center mt-6 space-x-4">
-                <a
-                    href="/dashboard"
-                    class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
-                >
-                    Back to Dashboard
-                </a>
-                <a
-                    href="/"
-                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
-                >
-                    Back to Home
-                </a>
-            </div>
         </div>
-        <script src="/static/localize_time.js"></script>
-    </body>
-</html>
+    </div>
+
+    <h2
+        class="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2"
+    >
+        Statistics
+    </h2>
+    <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-700/50 p-4 rounded-md mb-8"
+    >
+        <div class="text-center">
+            <p class="text-3xl font-bold text-blue-400">
+                {{ unique_users_count }}
+            </p>
+            <p class="text-gray-400">Unique Users</p>
+        </div>
+        <div class="text-center">
+            <p class="text-3xl font-bold text-green-400">
+                {{ total_characters_count }}
+            </p>
+            <p class="text-gray-400">Total Characters</p>
+        </div>
+        <div class="text-center">
+            <p class="text-3xl font-bold text-yellow-400">
+                {{ min_sponsors_required }}
+            </p>
+            <p class="text-gray-400">Sponsors Required</p>
+        </div>
+    </div>
+
+    <h2
+        class="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2"
+    >
+        Pending Proposals
+    </h2>
+    <div class="bg-gray-800/50 p-4 rounded-md mb-8 max-h-96 overflow-y-auto">
+        {% if pending_spawn_proposals %}
+        <ul class="space-y-4">
+            {% for proposal in pending_spawn_proposals %} {{
+            spawn_proposal_card(proposal, world, min_sponsors_required,
+            sponsored_proposal_ids) }} {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-gray-400 text-center py-4">
+            No pending spawn proposals for this world. Why not propose one?
+        </p>
+        {% endif %}
+    </div>
+
+    <h2
+        class="text-2xl font-semibold text-white mb-4 border-b border-gray-700 pb-2"
+    >
+        Spawns
+    </h2>
+    <div class="mb-4">
+        <div class="flex flex-col sm:flex-row gap-4 mb-2">
+            <input
+                type="text"
+                id="spawn-search"
+                onkeyup="filterSpawns()"
+                placeholder="Search spawn by name..."
+                class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+            />
+
+            {% if characters_on_world %}
+            <select
+                id="level-filter"
+                onchange="filterSpawns()"
+                class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+            >
+                <option value="">Filter by Character Level</option>
+                {% for character in characters_on_world %}
+                <option value="{{ character.level }}">
+                    {{ character.name }} (Level {{ character.level }})
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <input
+                type="number"
+                id="level-filter"
+                onkeyup="filterSpawns()"
+                placeholder="Filter by character level..."
+                class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+            />
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800/50 p-1 rounded-md">
+        {% if spawns %}
+        <div
+            id="existing-spawn-list"
+            class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+        >
+            {% for spawn in spawns %} {{ spawn_card(spawn, world,
+            favourited_spawn_ids) }} {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-400 text-center py-4">
+            No existing spawns for this world.
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+{# All the previous JavaScript can be moved to a separate file, but for this
+example, I'll keep it here. #}
+<script>
+    // NOTE: This script assumes `favourited_spawn_ids` and `logged_in_user_id` are passed from the FastAPI template response.
+    let favourited_spawn_ids = {{ favourited_spawn_ids }};
+    let worldName = "{{ world.name}}";
+    const logged_in_user_id = {{ current_user.id | default('null') }};
+
+    function showMessage(msg, type) {
+        const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) return;
+
+        const messageDiv = document.createElement('div');
+        const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+        messageDiv.className = `${bgColor} text-white p-3 rounded-md mb-4 text-center transition-opacity duration-300`;
+        messageDiv.textContent = msg;
+
+        messageContainer.appendChild(messageDiv);
+
+        setTimeout(() => {
+            messageDiv.style.opacity = '0';
+            messageDiv.addEventListener('transitionend', () => messageDiv.remove());
+        }, 5000);
+    }
+
+    async function handleSponsorClick(buttonElement) {
+        const proposalId = buttonElement.dataset.proposalId;
+        const worldName = buttonElement.dataset.worldName;
+
+        if (!logged_in_user_id) {
+            showMessage("You must be logged in to sponsor a proposal.", 'error');
+            return;
+        }
+
+        buttonElement.disabled = true;
+        buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Sponsoring...';
+
+        try {
+            const response = await fetch(`/worlds/${worldName}/sponsor`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `proposal_id=${proposalId}`
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to sponsor.');
+            }
+
+            showMessage(data.message, 'success');
+            if (data.spawn_created) {
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                buttonElement.textContent = "Sponsored";
+                buttonElement.classList.add('bg-gray-500', 'cursor-not-allowed');
+                buttonElement.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            }
+
+        } catch (error) {
+            showMessage(error.message, 'error');
+            buttonElement.disabled = false;
+            buttonElement.innerHTML = '<i class="fas fa-bolt mr-2"></i>Sponsor';
+        }
+    }
+
+    async function toggleFavourite(button,) {
+        if (!logged_in_user_id) {
+            showMessage("You must be logged in to favourite a spawn.", 'error');
+            return;
+        }
+
+        const spawnId = button.dataset.spawnId;
+        const spawnName = button.dataset.spawnName;
+        const iconElement = button.querySelector('i')
+        const isfavourited = favourited_spawn_ids.includes(parseInt(spawnId));
+        const action = isfavourited ? 'remove' : 'add';
+
+        iconElement.classList.add('opacity-50');
+
+        try {
+            const formData = new FormData();
+            formData.append('action', action);
+
+            const response = await fetch(`/worlds/${worldName}/spawns/${spawnName}/favourite`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.detail || 'Failed to update favourite.');
+
+            showMessage(data.message, 'success');
+
+            // Update local state and UI
+            if (action === 'add') {
+                favourited_spawn_ids.push(parseInt(spawnId));
+                iconElement.classList.replace('text-gray-500', 'text-yellow-400');
+                iconElement.classList.replace('far', 'fas');
+
+            } else {
+                favourited_spawn_ids = favourited_spawn_ids.filter(id => id !== parseInt(spawnId));
+                iconElement.classList.replace('text-yellow-400', 'text-gray-500');
+                iconElement.classList.replace('fas', 'far');
+            }
+
+        } catch (error) {
+             showMessage(error.message, 'error');
+        } finally {
+            iconElement.classList.remove('opacity-50');
+        }
+    }
+
+    function filterSpawns() {
+        const searchText = document.getElementById('spawn-search').value.toLowerCase();
+        const levelFilter = document.getElementById('level-filter').value;
+        const spawnList = document.getElementById('existing-spawn-list');
+        const spawns = spawnList.children;
+
+        for (const spawn of spawns) {
+            const spawnName = spawn.dataset.spawnName.toLowerCase();
+            const minLevel = parseInt(spawn.dataset.minLevel);
+            const maxLevel = parseInt(spawn.dataset.maxLevel);
+
+            const nameMatch = spawnName.includes(searchText);
+            let levelMatch = true;
+            if (levelFilter && !isNaN(parseInt(levelFilter))) {
+                const level = parseInt(levelFilter);
+                levelMatch = (level >= minLevel && (maxLevel === 0 || level <= maxLevel));
+            }
+
+            spawn.style.display = (nameMatch && levelMatch) ? '' : 'none';
+        }
+    }
+</script>
+
+{% endcall %}

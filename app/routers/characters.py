@@ -30,16 +30,24 @@ async def list_characters(
     Requires user to be logged in.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
         # Redirect to login if not authenticated
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Fetch all characters from the database
-    characters = db.query(Character).filter(Character.user_id == user_id).order_by(Character.name).all()
+    characters = user.characters
 
     return templates.TemplateResponse(
         "character_list.html",
-        {"request": request, "characters": characters}
+        {
+            "current_user": user,
+            "request": request,
+            "characters": characters
+        }
     )
 
 @router.post("/characters", response_class=HTMLResponse)
@@ -54,10 +62,8 @@ async def create_character(
     Generates a validation hash for the character.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
         request.session.pop('user_id', None)
         request.session.pop('username', None)
@@ -135,9 +141,8 @@ async def view_character_detail(
     Displays the detail page for a specific character.
     Requires user to be logged in and own the character.
     """
-    username = request.session.get('username')
     user_id = request.session.get('user_id')
-    logger.info(f"Viewing character detail for {character_name} by {username}")
+    user = db.query(User).filter(User.id == user_id).first()
 
     # get and update character data
     character_data, other_characters = await get_character_data(character_name)
@@ -150,15 +155,9 @@ async def view_character_detail(
     db.query(Character).filter(Character.name == character_name).update({"level": character_data['level']})
     challenges = db.query(Character).filter(Character.name == character_name, Character.validation_hash != None).count()
 
-    if not username or not user_id:
-        # Redirect to login if not authenticated
-        logger.info(f"Redirecting {username} to login")
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     # Fetch the character by name and ensure it belongs to the logged-in user
     character = db.query(Character).filter(
-        Character.name == character_name,
-        Character.user_id == user_id
+        Character.name == character_name
     ).first()
 
     if not character:
@@ -174,7 +173,13 @@ async def view_character_detail(
 
     return templates.TemplateResponse(
         "character_details.html",
-        { "request": request, "character": character, "message": message, 'challenges': challenges }
+        {
+            "current_user": user,
+            "request": request,
+            "character": character,
+            "message": message,
+            'challenges': challenges
+        }
     )
 
 
@@ -190,15 +195,9 @@ async def get_verify_character_page(
     """
     logger.info(f"Viewing character verification page for {character_name}")
     user_id = request.session.get('user_id')
-    if not user_id:
-        logger.info("User not logged in")
-        logger.info("Redirecting to login page")
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
-        logger.info("User not found")
-        logger.info("Redirecting to login page")
         request.session.pop('user_id', None)
         request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -264,6 +263,7 @@ async def get_verify_character_page(
     return templates.TemplateResponse(
         "character_verify.html",
         {
+            "current_user": user,
             "request": request,
             "character": character_to_verify,
             "other_characters_to_validate": other_characters_to_validate,
@@ -382,7 +382,9 @@ async def validate_character(
     user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        return RedirectResponse(url="/login")
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Verify Main Character
     character_data, other_characters = await get_character_data(character_name)
@@ -431,13 +433,9 @@ async def get_disown_character_page(
     Displays a confirmation page to disown a character, showing its stats.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        logger.info(f"Unauthorized access to disown confirmation page for {character_name}, redirecting to login.")
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
-        logger.error(f"User ID {user_id} not found in DB during disown confirmation page access. Session may be stale.")
         request.session.pop('user_id', None)
         request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -461,6 +459,7 @@ async def get_disown_character_page(
     return templates.TemplateResponse(
         "character_disown_confirm.html",
         {
+            "current_user": user,
             "request": request,
             "character": character_to_disown,
             "message": message,
@@ -480,13 +479,9 @@ async def disown_character(
     Sets user_id to None and validation_hash to None.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        logger.warning("Attempt to disown character by unauthenticated user.")
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
-        logger.error(f"User ID {user_id} not found in DB during disown. Session may be stale.")
         request.session.pop('user_id', None)
         request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)

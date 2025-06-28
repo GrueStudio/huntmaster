@@ -21,8 +21,16 @@ def get_now_utc_naive():
     return datetime.now(UTC).replace(tzinfo=None)
 
 @router.get("/login", response_class=HTMLResponse)
-async def get_login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+async def get_login_form(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return templates.TemplateResponse("login.html", {"current_user": user, "request": request, "error": None})
+    else:
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/login", response_class=HTMLResponse)
 async def post_login_form(
@@ -48,7 +56,12 @@ async def logout(request: Request):
     return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.get("/register", response_class=HTMLResponse)
-async def get_register_form(request: Request):
+async def get_register_form(request: Request, db : Session = Depends(get_db)):
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user:
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse("register.html", {"request": request, "error": None})
 
 @router.post("/register", response_class=HTMLResponse)
@@ -59,6 +72,11 @@ async def post_register_form(
     confirm_password: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user:
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     error_message = None
 
     if not username or not password or not confirm_password:
@@ -69,12 +87,12 @@ async def post_register_form(
         error_message = "Password must be at least 6 characters long."
 
     if error_message:
-        return templates.TemplateResponse("register.html", {"request": request, "error": error_message})
+        return templates.TemplateResponse("register.html", {"current_user": user, "request": request, "error": error_message})
 
     existing_user_by_username = db.query(User).filter(User.username == username).first()
     if existing_user_by_username:
         error_message = "Username already registered."
-        return templates.TemplateResponse("register.html", {"request": request, "error": error_message})
+        return templates.TemplateResponse("register.html", {"current_user": user, "request": request, "error": error_message})
 
     try:
         new_user = User(username=username)
@@ -89,12 +107,12 @@ async def post_register_form(
     except IntegrityError:
         db.rollback()
         error_message = "A user with this username already exists (database integrity error)."
-        return templates.TemplateResponse("register.html", {"request": request, "error": error_message})
+        return templates.TemplateResponse("register.html", {"current_user": user, "request": request, "error": error_message})
     except Exception as e:
         db.rollback()
         logger.error(f"Error during registration: {e}")
         error_message = "An unexpected error occurred during registration."
-        return templates.TemplateResponse("register.html", {"request": request, "error": error_message})
+        return templates.TemplateResponse("register.html", {"current_user": user, "request": request, "error": error_message})
 
 @router.get("/account-recovery", response_class=HTMLResponse)
 async def get_account_recovery(request: Request, db: Session = Depends(get_db)):
@@ -111,12 +129,12 @@ async def get_account_recovery(request: Request, db: Session = Depends(get_db)):
 
         return templates.TemplateResponse(
             "account_recovery.html",
-            {"request": request, "logged_in_user": user, "tokens": tokens, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
+            {"current_user": user, "request": request, "logged_in_user": user, "tokens": tokens, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
         )
     else:
         return templates.TemplateResponse(
             "account_recovery.html",
-            {"request": request, "logged_in_user": None, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
+            {"current_user": None, "request": request, "logged_in_user": None, "message": None, "error": None, "now_utc_naive": get_now_utc_naive()}
         )
 
 @router.post("/account-recovery/generate-token", response_class=HTMLResponse)
@@ -156,7 +174,6 @@ async def generate_recovery_token(request: Request, db: Session = Depends(get_db
     db.commit()
     db.refresh(new_token)
 
-    logger.info(f"New recovery token generated for user {token_value}")
     return RedirectResponse(url="/account-recovery", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post(

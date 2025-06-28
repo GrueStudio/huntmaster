@@ -1,170 +1,199 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Account Recovery - HuntMaster</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script src="/static/localize_time.js"></script>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
-        <style>
-            body {
-                font-family: "Inter", sans-serif;
-                background-color: #1c1c1c; /* eerie-black */
-            }
-        </style>
-        <script>
-            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            coyote: "#866533",
-                            "reseda-green": "#5c6c4b",
-                            "caput-mortuum": "#6a2824",
-                            "blue-green": "#28a1cc",
-                            "eerie-black": "#1c1c1c",
-                        },
-                        fontFamily: {
-                            inter: ["Inter", "sans-serif"],
-                        },
-                    },
-                },
-            };
-        </script>
-    </head>
-    <body
-        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
+{% from 'macros/_layout.html' import layout %} {# Define breadcrumbs for the
+Account Recovery page #} {% set breadcrumbs = [ { 'text': 'Dashboard', 'link':
+'/dashboard' }, { 'text': 'Account Recovery', 'link': None } ] %} {# Assuming
+'logged_in_user', 'message', 'error', 'tokens', and 'current_time' are passed
+from the backend. #} {# 'current_user' in the layout macro refers to the user
+object, not just a boolean. #} {% call layout(title='Account Recovery',
+current_user=logged_in_user, breadcrumbs=breadcrumbs) %}
+
+<div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full">
+    {# Removed max-w-md mx-auto to allow full width #}
+    <h2 class="text-3xl font-bold text-center text-white mb-6">
+        Account Recovery
+    </h2>
+
+    {% if message %}
+    <div class="bg-green-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ message }}
+    </div>
+    {% endif %} {% if error %}
+    <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ error }}
+    </div>
+    {% endif %} {# Best Practices Write-up #}
+    <div class="bg-gray-700 p-6 rounded-lg shadow-md mb-8">
+        <h3 class="text-xl font-semibold text-white mb-3">
+            Understanding and Securing Your Recovery Tokens
+        </h3>
+        <p class="text-gray-300 mb-4">
+            In an email-free system like HuntMaster, recovery tokens are your
+            **only key** to regaining access to your account if you forget your
+            password. They are highly sensitive, and if lost or compromised,
+            could lead to permanent loss of your account.
+        </p>
+        <p class="text-gray-300 mb-4">
+            **Why no email recovery?** To enhance privacy and reduce reliance on
+            external services, HuntMaster does not use email for password
+            resets. This makes your recovery tokens critically important.
+        </p>
+        <h4 class="text-lg font-semibold text-white mb-2">
+            Best Practices for Storing Your Tokens:
+        </h4>
+        <ul class="list-disc list-inside text-gray-300 space-y-2 ml-4">
+            <li>
+                <span class="font-bold text-blue-300">Physical Copy:</span>
+                Write down your tokens on paper and store them in a secure,
+                private location (e.g., a safe, a locked drawer). Avoid storing
+                them near your computer.
+            </li>
+            <li>
+                <span class="font-bold text-blue-300"
+                    >Secure Digital Storage:</span
+                >
+                Consider using an encrypted password manager or a secure digital
+                vault. Avoid saving them in plain text files on your computer,
+                cloud storage, or in notes apps that aren't encrypted.
+            </li>
+            <li>
+                <span class="font-bold text-blue-300">Do NOT Share:</span>
+                Never share your recovery tokens with anyone, even if they claim
+                to be HuntMaster support. We will never ask for them.
+            </li>
+            <li>
+                <span class="font-bold text-blue-300"
+                    >Generate New Regularly (Optional):</span
+                >
+                If you feel a token might have been exposed, you can generate a
+                new one. This will invalidate previous tokens.
+            </li>
+        </ul>
+        <p class="text-gray-300 mt-4">
+            Treat these tokens like keys to your digital identity. Your account
+            security depends on it.
+        </p>
+    </div>
+
+    {% if logged_in_user %} {# This assumes 'logged_in_user' is a user object or
+    evaluates to true if logged in #}
+    <h3
+        class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2"
     >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
-            <h2 class="text-3xl font-bold text-center text-white mb-6">
-                Account Recovery
-            </h2>
-
-            {% if message %}
-            <div
-                class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+        Your Recovery Tokens
+    </h3>
+    {% if tokens %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {# Grid for token cards #} {% for token in tokens %} {% set is_expired =
+        current_time and token.expiration_time and token.expiration_time <
+        current_time %} {% set status_text = "Used" if token.used else
+        ("Expired" if is_expired else "Active") %} {% set status_color =
+        "text-red-400" if token.used or is_expired else "text-green-400" %}
+        <div
+            class="bg-gray-700 p-4 rounded-lg shadow-md flex flex-col space-y-2"
+        >
+            <p class="text-sm text-gray-400">Token:</p>
+            <p
+                class="font-mono text-lg text-blue-green break-all select-all font-bold"
             >
-                {{ message }}
+                {{ token.token }}
+            </p>
+            <div class="flex justify-between items-center text-sm">
+                <p class="text-gray-400">
+                    Expires:
+                    <span class="text-gray-300"
+                        >{{ token.expiration_time | datetimeformat | safe
+                        }}</span
+                    >
+                </p>
+                <span class="font-semibold {{ status_color }}">
+                    {{ status_text }}
+                </span>
             </div>
-            {% endif %} {% if error %}
-            <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
-                {{ error }}
-            </div>
-            {% endif %} {% if logged_in_user %}
-            <h3 class="text-xl font-semibold text-white mb-4">
-                Your Recovery Tokens
-            </h3>
-            {% if tokens %}
-            <ul class="list-disc list-inside text-gray-300 mb-6 space-y-2">
-                {% for token in tokens %}
-                <li
-                    class="bg-gray-700 p-2 rounded-md flex justify-between items-center"
-                >
-                    <span
-                        >Token:
-                        <span class="font-mono text-blue-green"
-                            >{{ token.token }}</span
-                        ></span
-                    >
-                    <span
-                        >Expires: {{ token.expiration_time | datetimeformat |
-                        safe }}</span
-                    >
-                    {% if token.used %}
-                    <span class="text-red-400">Used</span>
-                    {% else %}
-                    <span class="text-green-400">Active</span>
-                    {% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="text-gray-300 mb-4">
-                You have no active recovery tokens.
-            </p>
-            {% endif %}
-
-            <form
-                action="/account-recovery/generate-token"
-                method="post"
-                class="mt-6"
-            >
-                <button
-                    type="submit"
-                    class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
-                >
-                    Generate New Token
-                </button>
-            </form>
-            <p class="text-center text-gray-400 text-sm mt-6">
-                <a href="/dashboard" class="text-blue-green hover:underline"
-                    >Back to Dashboard</a
-                >
-            </p>
-            {% else %}
-            <h3 class="text-xl font-semibold text-white mb-4">
-                Consume Token to Reset Password
-            </h3>
-            <form action="/account-recovery" method="post" class="space-y-4">
-                <div>
-                    <label
-                        for="token"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >Recovery Token</label
-                    >
-                    <input
-                        type="text"
-                        id="token"
-                        name="token"
-                        required
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                </div>
-                <div>
-                    <label
-                        for="new_password"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >New Password</label
-                    >
-                    <input
-                        type="password"
-                        id="new_password"
-                        name="new_password"
-                        required
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                </div>
-                <div>
-                    <label
-                        for="confirm_password"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >Confirm New Password</label
-                    >
-                    <input
-                        type="password"
-                        id="confirm_password"
-                        name="confirm_password"
-                        required
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                </div>
-                <button
-                    type="submit"
-                    class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
-                >
-                    Reset Password
-                </button>
-            </form>
-            <p class="text-center text-gray-400 text-sm mt-6">
-                <a href="/login" class="text-blue-green hover:underline"
-                    >Back to Login</a
-                >
-            </p>
-            {% endif %}
         </div>
-    </body>
-</html>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-300 mb-4 text-center">
+        You have no active recovery tokens. Generate one below to secure your
+        account.
+    </p>
+    {% endif %}
+
+    <form action="/account-recovery/generate-token" method="post" class="mt-6">
+        <button
+            type="submit"
+            class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+        >
+            Generate New Token
+        </button>
+    </form>
+    <p class="text-center text-gray-400 text-sm mt-6">
+        <a href="/dashboard" class="text-blue-green hover:underline">
+            Back to Dashboard
+        </a>
+    </p>
+    {% else %}
+    <h3 class="text-xl font-semibold text-white mb-4">
+        Consume Token to Reset Password
+    </h3>
+    <form action="/account-recovery" method="post" class="space-y-4">
+        <div>
+            <label
+                for="token"
+                class="block text-gray-300 text-sm font-medium mb-1"
+            >
+                Recovery Token
+            </label>
+            <input
+                type="text"
+                id="token"
+                name="token"
+                required
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+            />
+        </div>
+        <div>
+            <label
+                for="new_password"
+                class="block text-gray-300 text-sm font-medium mb-1"
+            >
+                New Password
+            </label>
+            <input
+                type="password"
+                id="new_password"
+                name="new_password"
+                required
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+            />
+        </div>
+        <div>
+            <label
+                for="confirm_password"
+                class="block text-gray-300 text-sm font-medium mb-1"
+            >
+                Confirm New Password
+            </label>
+            <input
+                type="password"
+                id="confirm_password"
+                name="confirm_password"
+                required
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+            />
+        </div>
+        <button
+            type="submit"
+            class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+        >
+            Reset Password
+        </button>
+    </form>
+    <p class="text-center text-gray-400 text-sm mt-6">
+        <a href="/login" class="text-blue-green hover:underline">
+            Back to Login
+        </a>
+    </p>
+    {% endif %}
+</div>
+<script</script>
+{% endcall %}

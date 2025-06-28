@@ -1,4 +1,3 @@
-from math import ceil
 from fastapi import APIRouter, Request, Depends, HTTPException, status, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
@@ -9,7 +8,7 @@ from datetime import datetime, timedelta, UTC, time
 import pytz
 
 from database import get_db
-from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote, user_spawn_favorites # Import necessary models and enums
+from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote # Import necessary models and enums
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +25,14 @@ async def get_all_worlds(
     """
     Displays a page listing all available game worlds with basic statistics.
     """
+
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+
     # Get all worlds with their spawn counts
     worlds = db.query(World).order_by(World.name).all()
 
@@ -64,6 +71,7 @@ async def get_all_worlds(
     return templates.TemplateResponse(
         "world_list.html",
         {
+            "current_user": user,
             "request": request,
             "worlds": worlds_data,
             "logged_in_user_id": request.session.get('user_id')
@@ -81,15 +89,32 @@ async def get_world_page(
     character statistics, and a list of associated spawns.
     The world_name lookup is case-insensitive.
     """
+
     # Convert the incoming world_name to lowercase for case-insensitive comparison
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
 
+    breadcrumbs = [
+        {
+            'text': 'Dashboard',
+            'link': '/dashboard'
+        },
+        {
+            'text': 'Worlds',
+            'link': '/worlds'
+        },
+        {
+            'text': world.name,
+            'link': None
+        }
+    ]
     if not world:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
 
-    logged_in_user_id = request.session.get('user_id')
 
-    characters_on_world = db.query(Character).filter(Character.world_id == world.id, Character.user_id == logged_in_user_id).all()
+    logged_in_user_id = request.session.get('user_id')
+    user = None
+
+    characters_on_world = db.query(Character).filter(Character.world_id == world.id, Character.user_id == logged_in_user_id, Character.validation_hash == None).all()
     unique_characters = db.query(Character).filter(Character.world_id == world.id).count()
     unique_users = db.query(Character.user_id).filter(Character.world_id == world.id).distinct().count()
 
@@ -105,59 +130,62 @@ async def get_world_page(
     active_users_count = len(world.get_active_users(db))
     min_sponsors_required = min(world.sponsorship_flat, round(active_users_count * world.sposorship_fraction))
 
-    # Initialize sponsored_proposal_ids and favorited_spawn_ids
+    # Initialize sponsored_proposal_ids and favourited_spawn_ids
     sponsored_proposal_ids = set()
-    favorited_spawn_ids = set()
+    favourited_spawn_ids = set()
 
     # Get logged-in user ID for template rendering logic and fetching user-specific data
 
 
     if logged_in_user_id:
         # Fetch the user with their sponsored proposals (eager loading the relationship)
-        # Note: 'User.favorited_spawns' is a placeholder. You'll need to define this
+        # Note: 'User.favourited_spawns' is a placeholder. You'll need to define this
         # relationship and the associated join table in models.py for this to work.
         user = db.query(User).options(joinedload(User.sponsored_proposals)).filter(User.id == logged_in_user_id).first()
         if user:
-            sponsored_proposal_ids = [p.id for p in user.sponsored_proposals]
-            favorited_spawn_ids_query = db.query(user_spawn_favorites.c.spawn_id).filter(
-                user_spawn_favorites.c.user_id == logged_in_user_id
-            ).all()
-            favorited_spawn_ids = [sid[0] for sid in favorited_spawn_ids_query]
-
+            favourited_spawn_ids = [spawn.id for spawn in user.favourite_spawns]
+            sponsored_proposal_ids = [proposal.id for proposal in user.sponsored_proposals]
 
     return templates.TemplateResponse(
         "world.html",
         {
             "request": request,
             "world": world,
+            "breadcrumbs": breadcrumbs,
             "unique_users_count": unique_users,
             "total_characters_count": unique_characters,
             "characters_on_world": characters_on_world,
             "min_sponsors_required": min_sponsors_required,
             "spawns": spawns_in_world,
             "pending_spawn_proposals": pending_spawn_proposals, # Pass pending proposals to template
-            "logged_in_user_id": logged_in_user_id, # Pass logged-in user ID
+            "current_user": user, # Pass logged-in user ID
             "sponsored_proposal_ids": sponsored_proposal_ids, # Pass sponsored proposal IDs
-            "favorited_spawn_ids": favorited_spawn_ids # Pass favorited spawn IDs
+            "favourited_spawn_ids": favourited_spawn_ids # Pass favourited spawn IDs
         }
     )
 
 @router.get("/worlds/{world_name}/propose", response_class=HTMLResponse)
 async def get_propose_spawn_form(
     request: Request,
-    world_name: str # Capture world_name from the path
+    world_name: str, # Capture world_name from the path
+    db: Session = Depends(get_db)
 ):
     """
     Displays the form for proposing a new spawn.
     """
     # Check if user is logged in
-    username = request.session.get('username')
-    if not username:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to propose a spawn.")
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     return templates.TemplateResponse(
         "propose_spawn.html",
         {
+            "current_user": user,
             "request": request,
             "world_name": world_name,
             "message": "Propose a new spawn in this world!"
@@ -184,14 +212,13 @@ async def post_propose_spawn(
     the proposal is approved via the sponsorship mechanism.
     """
     # Check if user is logged in
-    username = request.session.get('username')
-    if not username:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to propose a spawn.")
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
 
-    # Find the user by username
-    user = db.query(User).filter(User.username == username).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Find the world by name (case-insensitive)
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
@@ -207,6 +234,7 @@ async def post_propose_spawn(
         return templates.TemplateResponse(
             "propose_spawn.html",
             {
+                "current_user": user,
                 "request": request,
                 "world_name": world_name,
                 "error": f"A spawn named '{spawn_name}' already exists in {world.name}.",
@@ -260,6 +288,14 @@ async def get_spawn_detail_page(
     Both world_name and spawn_name lookups are case-insensitive.
     Also fetches and displays various types of spawn change proposals.
     """
+
+    user_id = request.session.get('user_id')
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+
     # First, find the world
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
     if not world:
@@ -353,6 +389,7 @@ async def get_spawn_detail_page(
     return templates.TemplateResponse(
         "spawn_detail.html",
         {
+            "current_user": user,
             "request": request,
             "world": world,
             "spawn": spawn,
@@ -377,12 +414,12 @@ async def sponsor_spawn_proposal(
     This function implements the sponsorship logic and evaluates approval thresholds.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to sponsor a proposal.")
-
     user = db.query(User).filter(User.id == user_id).first()
+
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Only accessable by users, login first")
 
     spawn_proposal = db.query(SpawnProposal).filter(SpawnProposal.id == proposal_id).first()
     if not spawn_proposal:
@@ -478,8 +515,11 @@ async def get_propose_spawn_change_form(
     Dynamically populates current values and allows input for new ones.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to propose changes.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
     if not world:
@@ -495,6 +535,7 @@ async def get_propose_spawn_change_form(
     return templates.TemplateResponse(
         "propose_change.html",
         {
+            "current_user": user,
             "request": request,
             "world": world, # Pass the world object instead of just the name
             "spawn": spawn,
@@ -517,7 +558,10 @@ async def vote_on_spawn_change_proposal(
     Evaluates proposal status based on vote thresholds.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to vote on proposals.")
 
     try:
@@ -650,8 +694,11 @@ async def post_propose_spawn_change(
     Creates a new SpawnChangeProposal in the database.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to propose changes.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
     if not world:
@@ -766,18 +813,13 @@ async def toggle_spawn_favourite(
     in the form data, aligning with the `updateFavouritesOnServer` JavaScript function.
     """
     user_id = request.session.get('user_id')
-    if not user_id:
+    user = db.query(User).options(joinedload(User.favourite_spawns)).filter(User.id == user_id).first()
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": "You must be logged in to favourite a spawn."}
-        )
-
-    # Eagerly load the favourite_spawns relationship to avoid extra queries
-    user = db.query(User).options(joinedload(User.favourite_spawns)).filter(User.id == user_id).first()
-    if not user:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "User not found."}
         )
 
     # Find the spawn using a case-insensitive search, ensuring it belongs to the correct world
@@ -792,26 +834,44 @@ async def toggle_spawn_favourite(
             content={"detail": "Spawn not found in this world."}
         )
 
-    is_favorited: bool
+    is_favourited: bool
     message: str
 
     if action == "add":
         if spawn not in user.favourite_spawns:
             user.favourite_spawns.append(spawn)
+            db.add(user)
             message = f"'{spawn.name}' has been added to your favourites."
         else:
             message = f"'{spawn.name}' is already in your favourites."
-        is_favorited = True
+        is_favourited = True
     elif action == "remove":
         if spawn in user.favourite_spawns:
             user.favourite_spawns.remove(spawn)
+            db.add(user)
             message = f"'{spawn.name}' has been removed from your favourites."
         else:
             message = f"'{spawn.name}' is not in your favourites."
-        is_favorited = False
+        is_favourited = False
     else:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"detail": "Invalid action. Must be 'add' or 'remove'."}
         )
-    logger.info(message)
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating favourites: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "A database error occurred while updating your favourites."}
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "message": message,
+            "is_favourited": is_favourited
+        }
+    )

@@ -1,226 +1,193 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Propose Spawn - HuntMaster</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
-        <style>
-            body {
-                font-family: "Inter", sans-serif;
-                background-color: #1c1c1c; /* eerie-black */
-            }
-        </style>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            coyote: "#866533",
-                            "reseda-green": "#5c6c4b",
-                            "caput-mortuum": "#6a2824",
-                            "blue-green": "#28a1cc",
-                            "eerie-black": "#1c1c1c",
-                        },
-                        fontFamily: {
-                            inter: ["Inter", "sans-serif"],
-                        },
-                    },
-                },
-            };
-        </script>
-    </head>
-    <body
-        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter text-gray-200"
+{% from 'macros/_layout.html' import layout %} {# Define breadcrumbs for the
+Propose Spawn page #} {% set breadcrumbs = [ { 'text': 'Dashboard', 'link':
+'/dashboard' }, { 'text': 'Worlds', 'link': '/worlds' }, { 'text': world_name,
+'link': '/worlds/' + world_name }, { 'text': 'Propose New Spawn', 'link': None }
+] %} {# Assuming 'current_user', 'world_name', 'message', 'error', 'success' are
+passed from the backend #} {% call layout(title='Propose Spawn - HuntMaster',
+current_user=current_user, breadcrumbs=breadcrumbs) %}
+
+<div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg mx-auto">
+    {# Kept max-w-lg for form width #}
+    <h1 class="text-3xl font-bold text-white mb-4">
+        Propose a New Spawn for
+        <span class="text-blue-green">{{ world_name }}</span>
+    </h1>
+
+    {% if error %}
+    <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ error }}
+    </div>
+    {% endif %} {% if success %}
+    <div class="bg-green-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ success }}
+    </div>
+    {% endif %}
+
+    <p class="text-lg text-gray-300 mb-6">{{ message }}</p>
+
+    <form
+        action="/worlds/{{ world_name }}/propose"
+        method="post"
+        class="space-y-4"
     >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg">
-            <h1 class="text-3xl font-bold text-white mb-4">
-                Propose a New Spawn for
-                <span class="text-blue-green">{{ world_name }}</span>
-            </h1>
-
-            {% if error %}
-            <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
-                {{ error }}
-            </div>
-            {% endif %} {% if success %}
-            <div
-                class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+        <div>
+            <label
+                for="name"
+                class="block text-gray-300 text-sm font-medium mb-1"
+                >Spawn Name</label
             >
-                {{ success }}
-            </div>
-            {% endif %}
-
-            <p class="text-lg text-gray-300 mb-6">{{ message }}</p>
-
-            <form
-                action="/worlds/{{ world_name }}/propose"
-                method="post"
-                class="space-y-4"
+            <input
+                type="text"
+                id="name"
+                name="name"
+                required
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+            />
+        </div>
+        <div>
+            <label
+                for="description"
+                class="block text-gray-300 text-sm font-medium mb-1"
+                >Description (Optional)</label
             >
-                <div>
-                    <label
-                        for="name"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >Spawn Name</label
-                    >
-                    <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        required
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    />
-                </div>
-                <div>
-                    <label
-                        for="description"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >Description (Optional)</label
-                    >
-                    <textarea
-                        id="description"
-                        name="description"
-                        rows="3"
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
-                    ></textarea>
-                </div>
+            <textarea
+                id="description"
+                name="description"
+                rows="3"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white placeholder-gray-400"
+            ></textarea>
+        </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label
-                            for="min_level"
-                            class="block text-gray-300 text-sm font-medium mb-1"
-                            >Minimum Level</label
-                        >
-                        <input
-                            type="number"
-                            id="min_level"
-                            name="min_level"
-                            required
-                            value="1"
-                            min="1"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                        />
-                    </div>
-                    <div>
-                        <label
-                            for="max_level"
-                            class="block text-gray-300 text-sm font-medium mb-1"
-                            >Maximum Level</label
-                        >
-                        <input
-                            type="number"
-                            id="max_level"
-                            name="max_level"
-                            required
-                            value="1000"
-                            min="1"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                        />
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label
-                            for="min_claim_time"
-                            class="block text-gray-300 text-sm font-medium mb-1"
-                            >Minimum Claim Time (minutes)</label
-                        >
-                        <input
-                            type="number"
-                            id="min_claim_time"
-                            name="claim_min_mins"
-                            required
-                            value="15"
-                            min="1"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                        />
-                    </div>
-                    <div>
-                        <label
-                            for="max_claim_time"
-                            class="block text-gray-300 text-sm font-medium mb-1"
-                            >Maximum Claim Time (minutes)</label
-                        >
-                        <input
-                            type="number"
-                            id="max_claim_time"
-                            name="claim_max_mins"
-                            required
-                            value="180"
-                            min="1"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label
-                        for="locking_period_minutes"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >Locking Period (minutes)</label
-                    >
-                    <input
-                        type="number"
-                        id="locking_period_minutes"
-                        name="locking_time_mins"
-                        required
-                        value="15"
-                        min="0"
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                    />
-                </div>
-
-                <div>
-                    <label
-                        for="deprioratization_time"
-                        class="block text-gray-300 text-sm font-medium mb-1"
-                        >De-prioritization Time (minutes)</label
-                    >
-                    <p class="text-gray-400 text-xs mb-2">
-                        This is the maximum time a user can hunt in this spawn
-                        per day before their bids are de-prioritized.
-                    </p>
-                    <input
-                        type="number"
-                        id="deprioratization_time"
-                        name="deprioratize_time_mins"
-                        required
-                        value="0"
-                        min="0"
-                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
-                    />
-                </div>
-
-                <button
-                    type="submit"
-                    class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label
+                    for="min_level"
+                    class="block text-gray-300 text-sm font-medium mb-1"
+                    >Minimum Level</label
                 >
-                    Submit Proposal
-                </button>
-            </form>
-
-            <div class="text-center mt-6 space-x-4">
-                <a
-                    href="/worlds/{{ world_name }}"
-                    class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
+                <input
+                    type="number"
+                    id="min_level"
+                    name="min_level"
+                    required
+                    value="1"
+                    min="1"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                />
+            </div>
+            <div>
+                <label
+                    for="max_level"
+                    class="block text-gray-300 text-sm font-medium mb-1"
+                    >Maximum Level</label
                 >
-                    Back to World Page
-                </a>
-                <a
-                    href="/"
-                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
-                >
-                    Back to Home
-                </a>
+                <input
+                    type="number"
+                    id="max_level"
+                    name="max_level"
+                    required
+                    value="1000"
+                    min="1"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                />
             </div>
         </div>
-        <script src="/static/localize_time.js"></script>
-    </body>
-</html>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label
+                    for="min_claim_time"
+                    class="block text-gray-300 text-sm font-medium mb-1"
+                    >Minimum Claim Time (minutes)</label
+                >
+                <input
+                    type="number"
+                    id="min_claim_time"
+                    name="claim_min_mins"
+                    required
+                    value="15"
+                    min="1"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                />
+            </div>
+            <div>
+                <label
+                    for="max_claim_time"
+                    class="block text-gray-300 text-sm font-medium mb-1"
+                    >Maximum Claim Time (minutes)</label
+                >
+                <input
+                    type="number"
+                    id="max_claim_time"
+                    name="claim_max_mins"
+                    required
+                    value="180"
+                    min="1"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+                />
+            </div>
+        </div>
+
+        <div>
+            <label
+                for="locking_period_minutes"
+                class="block text-gray-300 text-sm font-medium mb-1"
+                >Locking Period (minutes)</label
+            >
+            <input
+                type="number"
+                id="locking_period_minutes"
+                name="locking_time_mins"
+                required
+                value="15"
+                min="0"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+            />
+        </div>
+
+        <div>
+            <label
+                for="deprioratization_time"
+                class="block text-gray-300 text-sm font-medium mb-1"
+                >De-prioritization Time (minutes)</label
+            >
+            <p class="text-gray-400 text-xs mb-2">
+                This is the maximum time a user can hunt in this spawn per day
+                before their bids are de-prioritized.
+            </p>
+            <input
+                type="number"
+                id="deprioratization_time"
+                name="deprioratize_time_mins"
+                required
+                value="0"
+                min="0"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green text-white"
+            />
+        </div>
+
+        <button
+            type="submit"
+            class="w-full bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+        >
+            Submit Proposal
+        </button>
+    </form>
+
+    <div class="text-center mt-6 space-x-4">
+        <a
+            href="/worlds/{{ world_name }}"
+            class="bg-coyote hover:bg-coyote-dark text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-coyote focus:ring-opacity-75 transition duration-300"
+        >
+            Back to World Page
+        </a>
+        <a
+            href="/"
+            class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
+        >
+            Back to Home
+        </a>
+    </div>
+</div>
+
+{% endcall %}

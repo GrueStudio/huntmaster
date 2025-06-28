@@ -1,209 +1,143 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Character Details - HuntMaster</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
-        <link
-            rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
-        />
-        <style>
-            body {
-                font-family: "Inter", sans-serif;
-                background-color: #1c1c1c; /* eerie-black */
-            }
-        </style>
-        <script>
-            // Tailwind CSS configuration for JIT mode (if not pre-compiled)
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            coyote: "#866533",
-                            "reseda-green": "#5c6c4b",
-                            "caput-mortuum": "#6a2824",
-                            "blue-green": "#28a1cc",
-                            "eerie-black": "#1c1c1c",
-                        },
-                        fontFamily: {
-                            inter: ["Inter", "sans-serif"],
-                        },
-                    },
-                },
-            };
-        </script>
-    </head>
-    <body
-        class="flex items-center justify-center min-h-screen p-4 bg-eerie-black font-inter"
-    >
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-2xl">
-            <h2 class="text-3xl font-bold text-center text-white mb-6">
-                Character Details:
-                <span class="text-blue-green">{{ character.name }}</span>
-            </h2>
+{% from 'macros/_layout.html' import layout %} {# Define breadcrumbs for the
+Character Details page #} {% set breadcrumbs = [ { 'text': 'Dashboard', 'link':
+'/dashboard' }, { 'text': 'My Characters', 'link': '/characters' }, { 'text':
+character.name, 'link': None } ] %} {# Assuming 'current_user' (the user object)
+and 'request' are passed to layout #} {% call layout(title='Character Details: '
++ character.name, current_user=current_user, breadcrumbs=breadcrumbs) %}
 
-            {% if message %}
-            <div
-                class="bg-green-500 text-white p-3 rounded-md mb-4 text-center"
+<div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full">
+    {# Removed max-w-2xl mx-auto to allow full width #}
+    <h2 class="text-3xl font-bold text-center text-white mb-6">
+        Character Details:
+        <span class="text-blue-green">{{ character.name }}</span>
+    </h2>
+
+    {% if message %}
+    <div class="bg-green-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ message }}
+    </div>
+    {% endif %} {% if error %}
+    <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <div class="space-y-4 text-gray-300">
+        <!-- Challenge Count Badge -->
+        {% if challenges and challenges > 0 %}
+        <div
+            class="flex justify-between items-center bg-yellow-900/50 p-3 rounded-md border border-yellow-600/50"
+        >
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-triangle text-yellow-400 mr-2"></i>
+                <span class="font-medium text-white"> Active Challenges: </span>
+            </div>
+            <span
+                class="bg-yellow-500 text-white font-bold px-3 py-1 rounded-full"
             >
-                {{ message }}
-            </div>
-            {% endif %} {% if error %}
-            <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
-                {{ error }}
-            </div>
-            {% endif %}
+                {{ challenges }}
+            </span>
+        </div>
+        {% endif %}
 
-            <div class="space-y-4 text-gray-300">
-                <!-- Challenge Count Badge -->
-                {% if challenges and challenges > 0 %}
-                <div
-                    class="flex justify-between items-center bg-yellow-900/50 p-3 rounded-md border border-yellow-600/50"
-                >
-                    <div class="flex items-center">
-                        <i
-                            class="fas fa-exclamation-triangle text-yellow-400 mr-2"
-                        ></i>
-                        <span class="font-medium text-white"
-                            >Active Challenges:</span
-                        >
-                    </div>
-                    <span
-                        class="bg-yellow-500 text-white font-bold px-3 py-1 rounded-full"
-                    >
-                        {{ challenges }}
-                    </span>
-                </div>
-                {% endif %}
-
-                <!-- Character Details -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="bg-gray-700 p-4 rounded-md">
-                        <h3 class="text-lg font-semibold text-white mb-2">
-                            Basic Info
-                        </h3>
-                        <p>
-                            <strong>Level:</strong> {{ character.level if
-                            character.level is not none else 'N/A' }}
-                        </p>
-                        <p>
-                            <strong>Vocation:</strong> {{ character.vocation if
-                            character.vocation is not none else 'N/A' }}
-                        </p>
-                        <p>
-                            <strong>World:</strong> {{ character.world.name if
-                            character.world else 'N/A' }}
-                        </p>
-                    </div>
-                    <div class="bg-gray-700 p-4 rounded-md">
-                        <h3 class="text-lg font-semibold text-white mb-2">
-                            Status
-                        </h3>
-                        <p>
-                            <strong>Validated:</strong>
-                            {% if character.validation_hash is none %}
-                            <span class="text-green-400">Yes</span>
-                            {% else %}
-                            <span class="text-yellow-400">Pending</span>
-                            {% endif %}
-                        </p>
-                        <p>
-                            <strong>Owner:</strong>
-                            {% if character.user %} {{ character.user.username
-                            }} {% else %}
-                            <span class="text-gray-400">None</span>
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Challenge Info for Owners -->
-                {% if challenges and challenges > 0 and character.user_id ==
-                request.session.get('user_id') and character.validation_hash is
-                none %}
-                <div
-                    class="bg-yellow-900/30 p-4 rounded-md border border-yellow-600/30"
-                >
-                    <h3
-                        class="text-lg font-semibold text-white mb-2 flex items-center"
-                    >
-                        <i class="fas fa-shield-alt text-yellow-400 mr-2"></i>
-                        Ownership Protection
-                    </h3>
-                    <p class="text-sm text-yellow-200">
-                        This character has {{ challenges }} active challenge(s).
-                        To maintain ownership, keep your validation hash in the
-                        character's comment on Tibia.com.
-                    </p>
-                </div>
-                {% endif %}
-
-                <!-- Action Buttons -->
-                <div class="flex flex-wrap gap-2 mt-4">
-                    {% if character.user_id == request.session.get('user_id') %}
-                    {% if character.validation_hash is not none %}
-                    <a
-                        href="/character/verify?character_name={{ character.name }}"
-                        class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
-                    >
-                        Complete Verification
-                    </a>
-                    {% endif %}
-                    <a
-                        href="/character/disown?character_name={{ character.name }}"
-                        class="bg-caput-mortuum hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-caput-mortuum focus:ring-opacity-75 transition duration-300"
-                    >
-                        Disown Character
-                    </a>
-                    {% elif character.validation_hash is none %}
-                    <a
-                        href="/character/verify?character_name={{ character.name }}"
-                        class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-75 transition duration-300"
-                    >
-                        Challenge Ownership
-                    </a>
-                    {% endif %}
-                </div>
-
-                <!-- History Sections -->
-                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
-                    Bid History
+        <!-- Character Details -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-gray-700 p-4 rounded-md">
+                <h3 class="text-lg font-semibold text-white mb-2">
+                    Basic Info
                 </h3>
-                <div class="bg-gray-700 p-4 rounded-md">
-                    <p class="text-gray-400">
-                        No bid history available yet. (Placeholder)
-                    </p>
-                </div>
-
-                <h3 class="text-xl font-semibold text-white mt-8 mb-4">
-                    Hunt History
-                </h3>
-                <div class="bg-gray-700 p-4 rounded-md">
-                    <p class="text-gray-400">
-                        No hunt history available yet. (Placeholder)
-                    </p>
-                </div>
+                <p>
+                    <strong>Level:</strong> {{ character.level if
+                    character.level is not none else 'N/A' }}
+                </p>
+                <p>
+                    <strong>Vocation:</strong> {{ character.vocation if
+                    character.vocation is not none else 'N/A' }}
+                </p>
+                <p>
+                    <strong>World:</strong> {{ character.world.name if
+                    character.world else 'N/A' }}
+                </p>
             </div>
-
-            <div class="text-center mt-8 space-x-4">
-                <a
-                    href="/characters"
-                    class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
-                    >Back to My Characters</a
-                >
-                <a
-                    href="/dashboard"
-                    class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
-                    >Back to Dashboard</a
-                >
+            <div class="bg-gray-700 p-4 rounded-md">
+                <h3 class="text-lg font-semibold text-white mb-2">Status</h3>
+                <p>
+                    <strong>Validated:</strong>
+                    {% if character.validation_hash is none %}
+                    <span class="text-green-400">Yes</span>
+                    {% else %}
+                    <span class="text-yellow-400">Pending</span>
+                    {% endif %}
+                </p>
+                <p>
+                    <strong>Owner:</strong>
+                    {% if character.user %} {{ character.user.username }} {%
+                    else %}
+                    <span class="text-gray-400">None</span>
+                    {% endif %}
+                </p>
             </div>
         </div>
-        <script src="/static/localize_time.js"></script>
-    </body>
-</html>
+
+        <!-- Challenge Info for Owners -->
+        {% if challenges and challenges > 0 and character.user_id ==
+        request.session.get('user_id') and character.validation_hash is none %}
+        <div
+            class="bg-yellow-900/30 p-4 rounded-md border border-yellow-600/30"
+        >
+            <h3 class="text-lg font-semibold text-white mb-2 flex items-center">
+                <i class="fas fa-shield-alt text-yellow-400 mr-2"></i>
+                Ownership Protection
+            </h3>
+            <p class="text-sm text-yellow-200">
+                This character has {{ challenges }} active challenge(s). To
+                maintain ownership, keep your validation hash in the character's
+                comment on Tibia.com.
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-2 mt-4">
+            {% if character.user_id == request.session.get('user_id') %} {% if
+            character.validation_hash is not none %}
+            <a
+                href="/character/verify?character_name={{ character.name }}"
+                class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
+            >
+                Complete Verification
+            </a>
+            {% endif %}
+            <a
+                href="/character/disown?character_name={{ character.name }}"
+                class="bg-caput-mortuum hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-caput-mortuum focus:ring-opacity-75 transition duration-300"
+            >
+                Disown Character
+            </a>
+            {% elif character.validation_hash is none %}
+            <a
+                href="/character/verify?character_name={{ character.name }}"
+                class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-75 transition duration-300"
+            >
+                Challenge Ownership
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- History Sections -->
+        <h3 class="text-xl font-semibold text-white mt-8 mb-4">Bid History</h3>
+        <div class="bg-gray-700 p-4 rounded-md">
+            <p class="text-gray-400">
+                No bid history available yet. (Placeholder)
+            </p>
+        </div>
+
+        <h3 class="text-xl font-semibold text-white mt-8 mb-4">Hunt History</h3>
+        <div class="bg-gray-700 p-4 rounded-md">
+            <p class="text-gray-400">
+                No hunt history available yet. (Placeholder)
+            </p>
+        </div>
+    </div>
+</div>
+{% endcall %}
