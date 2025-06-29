@@ -1,0 +1,59 @@
+{# Macro for displaying a single Favorite Spawn item as a dashboard card. Args:
+card_id (str): The unique HTML ID for the card. card_title (str): The title of
+the card (e.g., Spawn Name). card_data (dict): A dictionary containing the
+'spawn' SQLAlchemy object. e.g., {'spawn':
+<Spawn object
+    >} #} {% macro render_favourite_spawn_card(card_id, card_title, card_data)
+    %} {% set spawn = card_data.spawn %}
+    <div
+        class="dashboard-card bg-gray-800 p-6 rounded-lg shadow-xl border border-transparent hover:border-blue-500 transition-all duration-200 cursor-grab"
+        data-card-id="{{ card_id }}"
+        draggable="true"
+    >
+        {# Draggable is true by default, JS will toggle based on lock #}
+        <h3 class="text-xl font-bold text-white mb-2 flex items-center">
+            <i class="fas fa-heart text-red-400 mr-2"></i> {{ card_title }}
+            <span class="text-gray-400 text-sm ml-2"
+                >({{ spawn.world.name if spawn.world else 'N/A' }})</span
+            >
+        </h3>
+
+        <div class="text-sm text-gray-300 space-y-1 mb-3">
+            <p>
+                <strong>Level:</strong> {{ spawn.min_level if spawn.min_level is
+                not none else 'N/A' }} - {{ spawn.max_level if spawn.max_level
+                is not none else 'N/A' }}
+            </p>
+            {# Convert timedelta objects to string for display #}
+            <p>
+                <strong>Locking Period:</strong> {{ spawn.locking_period |
+                string if spawn.locking_period else 'N/A' }}
+            </p>
+            <p>
+                <strong>Claim Time:</strong> {{ spawn.claim_time_min | string if
+                spawn.claim_time_min else 'N/A' }} - {{ spawn.claim_time_max |
+                string if spawn.claim_time_max else 'N/A' }}
+            </p>
+            <p>
+                <strong>Deprioritize After:</strong> {{ spawn.deprioratize_time
+                | string if spawn.deprioratize_time else 'N/A' }}
+            </p>
+        </div>
+
+        {% if spawn.description %}
+        <p class="text-gray-400 text-sm mt-2 line-clamp-2">
+            {{ spawn.description }}
+        </p>
+        {% endif %}
+
+        <div class="mt-4 text-right">
+            <a
+                href="/worlds/{{ spawn.world.name | urlencode }}/spawns/{{ spawn.name | urlencode }}"
+                class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors text-sm font-medium"
+            >
+                View Spawn <i class="fas fa-chevron-right ml-1 text-xs"></i>
+            </a>
+        </div>
+    </div>
+    {% endmacro %}
+</Spawn>

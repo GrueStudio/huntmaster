@@ -1,18 +1,18 @@
-import os
+import os, time
 from datetime import datetime, UTC
 import httpx # Import httpx for making async HTTP requests
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from templating import templates
 from fastapi.staticfiles import StaticFiles
+from models import User, Spawn, World
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
 # Assuming database.py and models.py are in the same 'app' directory
 from database import get_db
-from models import World # Only import models directly used here
 from routers import accounts, characters, spawns # Import the new routers
 
 import logging
@@ -117,12 +117,60 @@ async def read_root(request: Request):
     return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    username = request.session.get('username')
-    if not username:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse("dashboard.html", {"request": request, "username": username})
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    start_time_total = time.time() # Start timing for the entire request
 
+    username = request.session.get('username')
+    user_id = request.session.get('user_id')
+
+    if not username or not user_id:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    start_time_db = time.time() # Start timing for DB query
+    user = db.query(User).options(selectinload(User.favourite_spawns).joinedload(Spawn.world)).filter(User.id == user_id).first()
+    end_time_db = time.time() # End timing for DB query
+    logger.info(f"Dashboard DB query time: {end_time_db - start_time_db:.4f} seconds")
+
+    if not user:
+        request.session.pop('user_id', None)
+        request.session.pop('username', None)
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    # --- Construct Dashboard Cards ---
+    cards = []
+
+    # Individual cards for each Favorite Spawn
+    if user.favourite_spawns:
+        for spawn in user.favourite_spawns:
+            # For `timedelta` objects (like locking_period), convert to string for simpler display in template
+            # If a more complex formatting is needed, create a custom Jinja2 filter or format here.
+            cards.append({
+                "id": f"favorite-spawn-{spawn.id}", # Unique ID for each spawn card
+                "type": "favourite_spawn", # Type for individual spawn cards
+                "title": spawn.name, # Title is the spawn name
+                "data": { # Pass the full spawn object or a dictionary representation of it
+                    "spawn": spawn # Pass the SQLAlchemy object directly, Jinja2 can access its attributes
+                }
+            })
+
+
+    breadcrumbs = [
+        {'text': 'Dashboard', 'link': None}
+    ]
+
+    end_time_total = time.time() # End timing for the entire request
+    logger.info(f"Dashboard total request time: {end_time_total - start_time_total:.4f} seconds")
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "current_user": user, # Pass the full user object for layout macro
+            "username": username, # Keep for backward compatibility if needed in dashboard.html
+            "cards": cards, # Pass the structured cards data
+            "breadcrumbs": breadcrumbs
+        }
+    )
 
 # --- Debug/Test Endpoint (Development Only) ---
 if os.environ.get("DEBUG_MODE") == "true":

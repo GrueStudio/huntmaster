@@ -137,10 +137,10 @@ breadcrumbs=breadcrumbs) %}
 {# All the previous JavaScript can be moved to a separate file, but for this
 example, I'll keep it here. #}
 <script>
-    // NOTE: This script assumes `favourited_spawn_ids` and `logged_in_user_id` are passed from the FastAPI template response.
+    // NOTE: This script assumes `favourited_spawn_ids` and `user_logged_in` are passed from the FastAPI template response.
     let favourited_spawn_ids = {{ favourited_spawn_ids }};
     let worldName = "{{ world.name}}";
-    const logged_in_user_id = {{ current_user.id | default('null') }};
+    const user_logged_in = {% if current_user %} true {% else %} false {% endif %};
 
     function showMessage(msg, type) {
         const messageContainer = document.getElementById('message-container');
@@ -163,7 +163,7 @@ example, I'll keep it here. #}
         const proposalId = buttonElement.dataset.proposalId;
         const worldName = buttonElement.dataset.worldName;
 
-        if (!logged_in_user_id) {
+        if (!user_logged_in) {
             showMessage("You must be logged in to sponsor a proposal.", 'error');
             return;
         }
@@ -200,7 +200,7 @@ example, I'll keep it here. #}
     }
 
     async function toggleFavourite(button,) {
-        if (!logged_in_user_id) {
+        if (!user_logged_in) {
             showMessage("You must be logged in to favourite a spawn.", 'error');
             return;
         }
