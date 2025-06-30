@@ -1,0 +1,82 @@
+.tww-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    height: 60px;
+    margin: 20px 0;
+    user-select: none;
+}
+
+.tww-hour-track {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    z-index: 0;
+}
+
+.tww-hour-block {
+    flex: 1;
+    height: 100%;
+}
+
+.tww-am1 {
+    background-color: #ffffff;
+}
+.tww-am2 {
+    background-color: #fff9d1;
+}
+.tww-pm1 {
+    background-color: #e6e6e6;
+}
+.tww-pm2 {
+    background-color: #cfe0f4;
+}
+
+.tww-selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(30, 144, 255, 0.3);
+    border: 2px solid #1e90ff;
+    border-radius: 4px;
+    cursor: move;
+    z-index: 1;
+    display: flex;
+    align-items: stretch;
+    position: absolute; /* important for resizer positioning */
+}
+
+.tww-resizer {
+    width: 10px;
+    background: #005599;
+    cursor: ew-resize;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+}
+
+.tww-resizer-left {
+    left: 0;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}
+
+.tww-resizer-right {
+    right: 0;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.tww-time-label {
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    font-family: monospace;
+    color: #333;
+}

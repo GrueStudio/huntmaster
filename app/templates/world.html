@@ -67,8 +67,8 @@ breadcrumbs=breadcrumbs) %}
         {% if pending_spawn_proposals %}
         <ul class="space-y-4">
             {% for proposal in pending_spawn_proposals %} {{
-            spawn_proposal_card(proposal, world, min_sponsors_required,
-            sponsored_proposal_ids) }} {% endfor %}
+            spawn_proposal_card(proposal, world, min_sponsors_required) }} {%
+            endfor %}
         </ul>
         {% else %}
         <p class="text-gray-400 text-center py-4">

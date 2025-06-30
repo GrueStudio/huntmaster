@@ -442,8 +442,8 @@ class Points(Base):
     character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     points = Column(Numeric, nullable=False) # Changed to Numeric for fractional values
-    character = relationship('Character')
-    spawn = relationship('Spawn')
+    character = relationship('Character', lazy='joined')
+    spawn = relationship('Spawn', lazy='joined')
     __table_args__ = (
         UniqueConstraint('character_id', 'spawn_id', name='_character_spawn_points_uc'),
     )
@@ -483,8 +483,8 @@ class Hunt(Base):
     end_time = Column(DateTime, nullable=False)
     points_paid = Column(Integer, default=0)
     bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
-    character = relationship('Character', back_populates='hunts')
-    spawn = relationship('Spawn', back_populates='hunts')
+    character = relationship('Character', back_populates='hunts', lazy='joined')
+    spawn = relationship('Spawn', back_populates='hunts', lazy='joined')
     bid = relationship('Bid')
 
     def __repr__(self):
