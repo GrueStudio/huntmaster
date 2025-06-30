@@ -13,7 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 # Assuming database.py and models.py are in the same 'app' directory
 from database import get_db
-from routers import accounts, characters, spawns # Import the new routers
+from routers import accounts, characters, spawns, scheduling # Import the new routers
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -107,6 +107,7 @@ async def on_shutdown():
 app.include_router(accounts.router)
 app.include_router(characters.router)
 app.include_router(spawns.router)
+app.include_router(scheduling.router)
 
 # --- Main Routes ---
 
