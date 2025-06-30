@@ -439,13 +439,13 @@ class Notification(Base):
 class Points(Base):
     __tablename__ = 'points'
     id = Column(Integer, primary_key=True)
-    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     points = Column(Numeric, nullable=False) # Changed to Numeric for fractional values
-    character = relationship('Character', lazy='joined')
+    user = relationship('User', lazy='joined')
     spawn = relationship('Spawn', lazy='joined')
     __table_args__ = (
-        UniqueConstraint('character_id', 'spawn_id', name='_character_spawn_points_uc'),
+        UniqueConstraint('user_id', 'spawn_id', name='_character_spawn_points_uc'),
     )
     def __repr__(self):
         return f'<Points {self.points:.2f} for Character {self.character_id} on Spawn {self.spawn_id}>'
