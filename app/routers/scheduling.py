@@ -105,16 +105,17 @@ async def get_bid_form(
             "spawn": spawn,       # Pass the full spawn object
             "bid_settings": bid_settings, # Min/max claim duration
             "current_points_for_spawn": current_points_for_spawn, # Current points for this spawn
-            "breadcrumbs": breadcrumbs
+            "breadcrumbs": breadcrumbs,
+            "cache_buster": datetime.now().timestamp()
         }
     )
 
-@router.post("/worlds/{world_name}/spawns/{spawn_name}/bid", response_class=JSONResponse)
+@router.post("/worlds/{world_name}/spawns/{spawn_name}/bid", response_class=RedirectResponse)
 async def post_bid(
     request: Request,
     world_name: str,
     spawn_name: str,
-    spawn_id: Annotated[int, Form(...)], # Changed to Form for direct access from request body
+    spawn_id: Annotated[int, Form(...)],
     hunt_window_start: Annotated[str, Form(...)], # ISO string
     hunt_window_end: Annotated[str, Form(...)],   # ISO string
     preferred_hunt_duration_minutes: Annotated[int, Form(...)],
@@ -123,19 +124,21 @@ async def post_bid(
 ):
     """
     Handles the submission of a new bid for a spawn.
-    Implements the "First Bid Attempt" point assignment and point deduction.
+    Implements the "First Bid Attempt" point assignment (but not deduction yet).
     """
     user_id = request.session.get('user_id')
     user = db.query(User).filter(User.id == user_id).first()
 
+    # If user not logged in, redirect to login page
     if not user:
         request.session.pop('user_id', None)
         request.session.pop('username', None)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be logged in to place a bid.")
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Validate world and spawn exist
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
     if not world:
+        # This will still be an HTTPException as it's a fundamental routing/data error
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
 
     spawn = db.query(Spawn).filter(
@@ -144,7 +147,12 @@ async def post_bid(
         Spawn.id == spawn_id # Ensure spawn_id matches for robustness
     ).first()
     if not spawn:
+        # This will still be an HTTPException as it's a fundamental routing/data error
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world.")
+
+    # Base URL for redirecting back to the bid form with an error
+    redirect_url_base = f"/worlds/{world.name}/spawns/{spawn.name}/bid"
+    redirect_to_spawn_page = f"/worlds/{world.name}/spawns/{spawn.name}"
 
     # Parse datetime strings to UTC datetime objects
     try:
@@ -157,15 +165,15 @@ async def post_bid(
             parsed_hunt_window_end = parsed_hunt_window_end.replace(tzinfo=UTC)
 
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date/time format for hunt window.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Invalid date/time format for hunt window.", status_code=status.HTTP_303_SEE_OTHER)
 
     # Basic validation for bid points and time window
     if bid_points <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bid points must be positive.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Bid points must be positive.", status_code=status.HTTP_303_SEE_OTHER)
     if parsed_hunt_window_start >= parsed_hunt_window_end:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hunt window end time must be after start time.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Hunt window end time must be after start time.", status_code=status.HTTP_303_SEE_OTHER)
     if parsed_hunt_window_start < datetime.now(UTC):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hunt window must be in the future.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Hunt window must be in the future.", status_code=status.HTTP_303_SEE_OTHER)
 
     # 1. Get or Create User's Spawn-Specific Points
     user_points_entry = db.query(Points).filter(
@@ -181,22 +189,19 @@ async def post_bid(
             points=1000.00 # Initial points as per requirement
         )
         db.add(user_points_entry)
-        db.flush() # Flush to make the new entry available for point deduction
+        db.flush() # Flush to make the new entry available for point checks
         logger.info(f"Assigned initial 1000 points to user {user.id} for spawn {spawn.name}.")
 
     # 2. Check if user has enough points
     if user_points_entry.points < bid_points:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Insufficient points for this bid. You have {user_points_entry.points} points.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Insufficient points for this bid. You have {user_points_entry.points} points.", status_code=status.HTTP_303_SEE_OTHER)
 
     # Also enforce minimum bid (1/4 of total points)
     min_bid_required = user_points_entry.points / 4
     if bid_points < min_bid_required:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"You must bid at least {min_bid_required:.0f} points (1/4 of your total).")
+        return RedirectResponse(url=f"{redirect_url_base}?error=You must bid at least {min_bid_required:.0f} points (1/4 of your total).", status_code=status.HTTP_303_SEE_OTHER)
 
-
-    # 3. Deduct points
-    user_points_entry.points -= bid_points
-    db.add(user_points_entry) # Mark for update
+    # 3. Skip point deduction for now as per requirement
 
     # 4. Create the Bid entry
     new_bid = Bid(
@@ -205,31 +210,19 @@ async def post_bid(
         bid_points=bid_points,
         hunt_window_start=parsed_hunt_window_start,
         hunt_window_end=parsed_hunt_window_end,
-        # claim_time_offset: This will be determined by the scheduler or default to 0 for now
-        # For Sprint 0.5.0, we can set a default or leave it nullable if not used immediately by scheduler
-        # Assuming preferred_hunt_duration_minutes from frontend is for scheduler's info, not direct offset
-        # If claim_time_offset is mandatory, it needs to be calculated or passed.
-        # For now, let's set it to 0 timedelta if it's not directly from user input.
-        claim_time_offset=timedelta(minutes=0), # Default for now, scheduler will refine
-        # scheduled_start is nullable, will be set by scheduler
-        # is_locked is default False
+        claim_time=timedelta(minutes=preferred_hunt_duration_minutes), # Default for now, scheduler will refine
     )
     db.add(new_bid)
 
     try:
         db.commit()
-        db.refresh(user_points_entry) # Refresh to show updated points
         db.refresh(new_bid)
     except Exception as e:
         db.rollback()
         logger.error(f"Error placing bid for user {user.id} on spawn {spawn.name}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to place bid due to a database error.")
+        return RedirectResponse(url=f"{redirect_url_base}?error=Failed to place bid due to a database error.", status_code=status.HTTP_303_SEE_OTHER)
 
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content={
-            "message": "Bid placed successfully!",
-            "bid_id": new_bid.id,
-            "current_points": float(user_points_entry.points) # Return updated points
-        }
+    return RedirectResponse(
+        url=f"{redirect_to_spawn_page}?message=Bid placed successfully!",
+        status_code=status.HTTP_303_SEE_OTHER
     )

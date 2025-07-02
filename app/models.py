@@ -42,8 +42,8 @@ class Vote(Base):
     proposal_id = Column(Integer, ForeignKey('spawn_change_proposals.id'), primary_key=True)
     vote_type = Column(Enum(VoteType))
 
-    user = relationship('User', back_populates='votes', lazy='joined')
-    proposal = relationship("SpawnChangeProposal", back_populates='votes', lazy='joined')
+    user = relationship('User', back_populates='votes', lazy='select')
+    proposal = relationship("SpawnChangeProposal", back_populates='votes', lazy='select')
 
 
 
@@ -61,11 +61,12 @@ class User(Base):
     username = Column(String(80), unique=True, nullable=False)
     password_hash = Column(String(120), nullable=False)
     discord_id = Column(String(50), unique=True, nullable=True)  # Added for Discord integration
-    characters = relationship('Character', back_populates='user', lazy='joined')
-    recovery_tokens = relationship('RecoveryToken', back_populates='user', lazy='joined')
+    characters = relationship('Character', back_populates='user', lazy='select')
+    recovery_tokens = relationship('RecoveryToken', back_populates='user', lazy='select')
     is_admin = Column(Boolean, default=False)
     notifications = relationship('Notification', back_populates='user') # Added back_populates
-    votes = relationship('Vote', back_populates='user', lazy='joined')
+    votes = relationship('Vote', back_populates='user', lazy='select')
+    bids = relationship('Bid', back_populates='user', lazy='select')
 
     sponsored_proposals = relationship(
         "SpawnProposal",
@@ -123,7 +124,6 @@ class Character(Base):
 
     user = relationship('User', back_populates='characters')
     world = relationship('World', back_populates='characters')
-    bids = relationship('Bid', back_populates='character')
     hunts = relationship('Hunt', back_populates='character')
 
     __table_args__ = (
@@ -176,9 +176,9 @@ class World(Base):
     sponsorship_flat = Column(Integer, nullable=False, default=5)
     sposorship_fraction = Column(Numeric, nullable=False, default=0.1)
 
-    spawns = relationship('Spawn', back_populates='world', lazy='joined')
-    spawn_proposals = relationship('SpawnProposal', back_populates='world', lazy='joined')
-    characters = relationship('Character', back_populates='world', lazy='joined')
+    spawns = relationship('Spawn', back_populates='world', lazy='select')
+    spawn_proposals = relationship('SpawnProposal', back_populates='world', lazy='select')
+    characters = relationship('Character', back_populates='world', lazy='select')
 
     def get_active_users(self, db):
         """
@@ -192,35 +192,21 @@ class World(Base):
 
         # Query to find the latest activity date (Bid or Hunt) for each user
         # across their characters in this specific world.
-        latest_user_activity_in_world = (
-            db.query(
-                User.id.label('user_id'),
-                func.max(func.greatest(
-                    Bid.hunt_window_start,
-                    Hunt.start_time
-                )).label('overall_last_activity')
-            )
-            .join(Character, Character.user_id == User.id)
-            .outerjoin(Bid, Bid.character_id == Character.id)
-            .outerjoin(Hunt, Hunt.character_id == Character.id)
-            .filter(Character.world_id == self.id) # Filter characters to this specific world instance
-            .group_by(User.id)
-        ).subquery()
+        threshold_date = datetime.now(UTC) - self.inactive_threshold
 
-        # Query for User objects based on their latest activity date in this world
-        active_users_query = (
+        active_users = (
             db.query(User)
-            .join(latest_user_activity_in_world, latest_user_activity_in_world.c.user_id == User.id)
+            .join(Bid, Bid.user_id == User.id)
+            .join(Spawn, Spawn.id == Bid.spawn_id)  # Join through Spawn
             .filter(
-                and_(
-                    latest_user_activity_in_world.c.overall_last_activity.isnot(None), # Must have activity
-                    latest_user_activity_in_world.c.overall_last_activity >= threshold_date # Activity is recent enough
-                )
+                Spawn.world_id == self.id,  # Filter by world_id through Spawn
+                Bid.hunt_window_start >= threshold_date
             )
-            .distinct() # Ensure distinct User objects
+            .distinct()
+            .all()
         )
 
-        return active_users_query.all()
+        return active_users
 
 
     def __repr__(self):
@@ -243,8 +229,8 @@ class Spawn(Base):
     world = relationship('World', back_populates='spawns')
     proposal_origin = relationship('SpawnProposal', back_populates='spawn')
     change_proposals = relationship('SpawnChangeProposal', back_populates='spawn')
-    hunts = relationship('Hunt', back_populates='spawn', lazy='joined')
-    bids = relationship('Bid', back_populates='spawn', lazy='joined')
+    hunts = relationship('Hunt', back_populates='spawn', lazy='select')
+    bids = relationship('Bid', back_populates='spawn', lazy='select')
 
     # Updated: Using association table for favourited by users
     favourited_by = relationship(
@@ -272,34 +258,19 @@ class Spawn(Base):
 
         # Query to find the latest activity date (Bid or Hunt) for each user
         # across their characters on this specific spawn.
-        latest_user_activity_on_spawn = (
-            db.query(
-                User.id.label('user_id'),
-                func.max(func.greatest(
-                    Bid.hunt_window_start,
-                    Hunt.start_time
-                )).label('overall_last_activity')
-            )
-            .join(Character, Character.user_id == User.id)
-            .outerjoin(Bid, and_(Bid.character_id == Character.id, Bid.spawn_id == self.id)) # Filter bids to this spawn
-            .outerjoin(Hunt, and_(Hunt.character_id == Character.id, Hunt.spawn_id == self.id)) # Filter hunts to this spawn
-            .filter(Character.world_id == self.world_id) # Ensure character is in the same world as spawn
-            .group_by(User.id)
-        ).subquery()
-
-        # Query for User objects based on their latest activity date on this spawn
-        active_users_query = (
+        # Query to find the latest activity date (Bid) for each user on this specific spawn.
+        # Hunts are ignored as per requirement, assuming bids precede hunts.
+        active_users = (
             db.query(User)
-            .join(latest_user_activity_on_spawn, latest_user_activity_on_spawn.c.user_id == User.id)
+            .join(Bid, Bid.user_id == User.id)
             .filter(
-                and_(
-                    latest_user_activity_on_spawn.c.overall_last_activity.isnot(None), # Must have activity
-                    latest_user_activity_on_spawn.c.overall_last_activity >= threshold_date # Activity is recent enough
-                )
+                Bid.spawn_id == self.id,
+                Bid.hunt_window_start >= threshold_date
             )
             .distinct()
+            .all()
         )
-        return active_users_query.all()
+        return active_users
 
     def __repr__(self):
         return f'<Spawn {self.name}>'
@@ -376,7 +347,7 @@ class SpawnChangeProposal(Base):
     # Link to the actual Spawn if the proposal is approved and spawn created
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=True)
     spawn = relationship('Spawn', foreign_keys=[spawn_id], back_populates='change_proposals') # Link back to the created Spawn
-    votes = relationship('Vote', back_populates='proposal', lazy='joined')
+    votes = relationship('Vote', back_populates='proposal', lazy='select')
 
     __table_args__ = (
         CheckConstraint(
@@ -442,8 +413,8 @@ class Points(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     points = Column(Numeric, nullable=False) # Changed to Numeric for fractional values
-    user = relationship('User', lazy='joined')
-    spawn = relationship('Spawn', lazy='joined')
+    user = relationship('User', lazy='select')
+    spawn = relationship('Spawn', lazy='select')
     __table_args__ = (
         UniqueConstraint('user_id', 'spawn_id', name='_character_spawn_points_uc'),
     )
@@ -453,23 +424,20 @@ class Points(Base):
 class Bid(Base):
     __tablename__ = 'bids'
     id = Column(Integer, primary_key=True)
-    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     bid_points = Column(Integer, nullable=False)
     hunt_window_start = Column(DateTime, nullable=False) # Renamed from start_time
     hunt_window_end = Column(DateTime, nullable=False) # Renamed from end_time
-    claim_time = Column(Integer, nullable=False)
-    scheduled_start = Column(DateTime, nullable=True) # Added scheduled_start
-    is_locked = Column(Boolean, default=False)
+    claim_time = Column(Interval, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint('character_id', 'spawn_id', 'hunt_window_start', name='_character_spawn_start_uc'),
         CheckConstraint('hunt_window_end > hunt_window_start', name='_end_after_start'),
         # Add a check constraint to ensure scheduled_start is within hunt_window
         CheckConstraint('scheduled_start >= hunt_window_start AND scheduled_start <= hunt_window_end', name='_scheduled_start_within_window'),
     )
-    character = relationship('Character', back_populates='bids')
-    spawn = relationship('Spawn', back_populates='bids')
+    user = relationship('User', back_populates='bids', lazy='select')
+    spawn = relationship('Spawn', back_populates='bids', lazy='select')
 
     def __repr__(self):
         return f'<Bid {self.id} - {self.character.name} on {self.spawn.name}>'
@@ -483,8 +451,8 @@ class Hunt(Base):
     end_time = Column(DateTime, nullable=False)
     points_paid = Column(Integer, default=0)
     bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
-    character = relationship('Character', back_populates='hunts', lazy='joined')
-    spawn = relationship('Spawn', back_populates='hunts', lazy='joined')
+    character = relationship('Character', back_populates='hunts', lazy='select')
+    spawn = relationship('Spawn', back_populates='hunts', lazy='select')
     bid = relationship('Bid')
 
     def __repr__(self):

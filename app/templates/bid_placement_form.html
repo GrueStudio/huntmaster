@@ -2,8 +2,9 @@
 provide: - current_user (for layout macro and user_id derivation) - world (full
 world object) - spawn (full spawn object) - bid_settings (object with
 min_claim_duration_minutes, max_claim_duration_minutes) -
-current_points_for_spawn (user's points for this specific spawn) #} {% call
-layout(title='Place Bid - HuntMaster', current_user=current_user,
+current_points_for_spawn (user's points for this specific spawn) - error
+(string, optional error message) - message (string, optional success message) #}
+{% call layout(title='Place Bid - HuntMaster', current_user=current_user,
 breadcrumbs=breadcrumbs) %}
 
 <div
@@ -17,6 +18,16 @@ breadcrumbs=breadcrumbs) %}
         Define your preferred hunt duration and then select your availability
         window on the timeline. Finally, set your bid points.
     </p>
+
+    {# Display success or error messages #} {% if message %}
+    <div class="bg-green-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ message }}
+    </div>
+    {% endif %} {% if error %}
+    <div class="bg-red-500 text-white p-3 rounded-md mb-4 text-center">
+        {{ error }}
+    </div>
+    {% endif %}
 
     <form id="bidForm" class="space-y-8">
         <!-- Preferred Hunt Duration Slider -->
@@ -119,13 +130,13 @@ breadcrumbs=breadcrumbs) %}
     </form>
 </div>
 
-<!-- Link to your external TWW CSS -->
-<link rel="stylesheet" href="/static/css/tww.css" />
+<!-- Link to your external TWW CSS (original path, JS will modify) -->
+<link rel="stylesheet" href="/static/css/tww.css?v={{ cache_buster }}" />
 
-<!-- Link to your external TWW JavaScript -->
-<script src="/static/js/tww.js"></script>
-<!-- Link to your external Localize Time JavaScript -->
-<script src="/static/localize_time.js"></script>
+<!-- Link to your external TWW JavaScript (original path, JS will modify) -->
+<script src="/static/js/tww.js?v={{ cache_buster }}"></script>
+<!-- Link to your external Localize Time JavaScript (original path, JS will modify) -->
+<script src="/static/localize_time.js?v={{ cache_buster }}"></script>
 
 <style>
     /* Override tww-time-label styles for better visibility */
@@ -158,12 +169,18 @@ breadcrumbs=breadcrumbs) %}
         const bidForm = document.getElementById('bidForm');
         const timeWindowWidget = document.getElementById('timeWindowWidget');
 
+        // Hidden input fields
+        const hiddenSpawnId = document.getElementById('hiddenSpawnId');
+        const hiddenHuntWindowStart = document.getElementById('hiddenHuntWindowStart');
+        const hiddenHuntWindowEnd = document.getElementById('hiddenHuntWindowEnd');
+        const hiddenPreferredDurationMinutes = document.getElementById('hiddenPreferredDurationMinutes');
+        const hiddenBidPoints = document.getElementById('hiddenBidPoints');
+
+
         // --- Data from Jinja2 Context (provided by FastAPI router) ---
-        // These values are injected by the server-side template engine.
         const worldName = "{{ world.name }}";
         const spawnName = "{{ spawn.name }}";
-        const spawnId = "{{ spawn.id }}";
-        // user_id is derived on backend from session
+        const spawnId = "{{ spawn.id }}"; // Already set in hidden input, but used for JS logic
         const minClaimDurationMinutes = {{ bid_settings.min_claim_duration_minutes }};
         const maxClaimDurationMinutes = {{ bid_settings.max_claim_duration_minutes }};
         const currentPointsForSpawn = {{ current_points_for_spawn }};
@@ -198,16 +215,9 @@ breadcrumbs=breadcrumbs) %}
 
             preferredDurationValue.textContent = formatMinutesToXhYm(value);
 
-            // Update TWW widget's minimum selection width based on this value
-            const twwContainer = document.getElementById('timeWindowWidget');
-            if (twwContainer && window.setTwwMinSelectionWidth) { // Check if the global function exists (from tww.js)
-                const twwContainerWidth = twwContainer.offsetWidth;
-                const totalHoursTWW = 12; // TWW widget's total hours (from tww.js)
-                const millisecondsInHour = 3600000;
-                const msPerPxTWW = (totalHoursTWW * millisecondsInHour) / twwContainerWidth;
-                const minWidthPxForTWW = (value * 60 * 1000) / msPerPxTWW; // Convert minutes to pixels
-
-                window.setTwwMinSelectionWidth(minWidthPxForTWW);
+            // Update TWW widget's minimum duration in minutes
+            if (typeof window.setTwwMinDurationMinutes === 'function') {
+                window.setTwwMinDurationMinutes(value); // Pass the preferred duration as the TWW's min duration
             }
         }
 
@@ -231,89 +241,63 @@ breadcrumbs=breadcrumbs) %}
         // Initial update for bid points
         updateBidPointsDisplay();
 
-        // --- TWW Widget External Display Logic ---
-        // The tww.js dispatches a 'tww-change' event, listen for it
-        // No longer updating separate displayWindowStart/End elements
-        // The tww-time-label inside the widget handles its own display.
-
         // --- Form Submission Logic ---
-        bidForm.addEventListener('submit', async (e) => { // Made async to use await
-            e.preventDefault(); // Prevent actual form submission
+        bidForm.addEventListener('submit', (e) => { // Removed async as fetch is no longer used
+            const twwInstance = document.getElementById('timeWindowWidget');
+            const isTwwValid = twwInstance.twwValue.isValid; // Access isValid getter
+
+            if (!isTwwValid) {
+                alert("Please ensure your selected time window meets the minimum duration requirement.");
+                e.preventDefault(); // Prevent form submission if invalid
+                return;
+            }
 
             // Get values from TWW widget
-            const twwInstance = document.getElementById('timeWindowWidget');
             let huntWindowStartISO = '';
             let huntWindowEndISO = '';
 
-            // Ensure twwValue and its methods exist before trying to use them
-            if (twwInstance && twwInstance.twwValue && typeof twwInstance.twwValue.start === 'function' && typeof window.convertLocalToUtcIso === 'function') {
-                // Get Date objects from TWW widget's getters
-                const localStartDateTime = twwInstance.twwValue.start();
-                const localEndDateTime = twwInstance.twwValue.end();
+            // Ensure twwValue exists and convertLocalToUtcIso function is available
+            if (twwInstance && twwInstance.twwValue && typeof window.convertLocalToUtcIso === 'function') {
+                const localStartDateTime = twwInstance.twwValue.start; // Access as getter
+                const localEndDateTime = twwInstance.twwValue.end;     // Access as getter
 
                 // Convert to UTC ISO strings using localize_time.js helper
-                huntWindowStartISO = convertLocalToUtcIso(localStartDateTime.toISOString().slice(0, 16)); // YYYY-MM-DDTHH:MM
-                huntWindowEndISO = convertLocalToUtcIso(localEndDateTime.toISOString().slice(0, 16));   // YYYY-MM-DDTHH:MM
+                huntWindowStartISO = window.convertLocalToUtcIso(localStartDateTime.toISOString().slice(0, 16));
+                huntWindowEndISO = window.convertLocalToUtcIso(localEndDateTime.toISOString().slice(0, 16));
 
                 if (!huntWindowStartISO || !huntWindowEndISO) {
                     alert("Error: Could not convert time window to UTC. Please ensure valid time selection.");
+                    e.preventDefault(); // Prevent form submission if conversion fails
                     return;
                 }
             } else {
                 console.error("TWW widget twwValue or convertLocalToUtcIso function not found.");
                 alert("Error: Time widget or conversion utility not available.");
-                return; // Stop submission
+                e.preventDefault(); // Prevent form submission if utilities are missing
+                return;
             }
 
             const preferredDuration = parseInt(preferredDurationSlider.value);
             const bidPoints = parseInt(bidPointsSlider.value);
 
-            const formData = {
-                spawn_id: spawnId,         // From Jinja2 context
-                hunt_window_start: huntWindowStartISO,
-                hunt_window_end: huntWindowEndISO,
-                preferred_hunt_duration_minutes: preferredDuration,
-                bid_points: bidPoints
-            };
+            // Populate hidden input fields
+            hiddenHuntWindowStart.value = huntWindowStartISO;
+            hiddenHuntWindowEnd.value = huntWindowEndISO;
+            hiddenPreferredDurationMinutes.value = preferredDuration;
+            hiddenBidPoints.value = bidPoints;
 
-            console.log("Submitting Bid Form Data:", formData);
-
-            const worldNameForUrl = worldName; // Get from JS variable
-            const spawnNameForUrl = spawnName; // Get from JS variable
-            const postUrl = `/worlds/${worldNameForUrl}/spawns/${spawnNameForUrl}/bid`;
-
-            try {
-                const response = await fetch(postUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json', // Sending JSON
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    alert(`Bid placed successfully! Message: ${result.message || 'Bid accepted.'}`);
-                    console.log("Bid submission successful:", result);
-                    // Optionally, redirect or clear form here
-                    // window.location.reload(); // Simple reload for demo
-                } else {
-                    const errorData = await response.json();
-                    alert(`Error placing bid: ${errorData.detail || 'An unknown error occurred.'}`);
-                    console.error("Bid submission failed:", errorData);
-                }
-            } catch (error) {
-                console.error("Network error or unexpected issue:", error);
-                alert("A network error occurred. Please try again.");
-            }
+            // Allow the form to submit normally
+            console.log("Form data prepared for submission. Allowing browser to POST.");
+            // No e.preventDefault() here, so the form will submit.
         });
 
         // Initial setup for TWW widget's min width on page load
+        // This ensures the TWW widget gets its initial min duration setting.
         window.addEventListener('load', () => {
+            updatePreferredDurationDisplay(); // Call this to set the TWW's min duration on load
             const twwContainer = document.getElementById('timeWindowWidget');
-            // Ensure tww.js has initialized its instance before trying to call updateDisplay
             if (twwContainer && twwContainer._twwInstance && twwContainer._twwInstance.updateDisplay) {
-                twwContainer._twwInstance.updateDisplay();
+                twwContainer._twwInstance.updateDisplay(); // Ensure TWW updates its display based on initial settings
             }
         });
     });

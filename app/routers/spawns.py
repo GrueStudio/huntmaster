@@ -115,8 +115,16 @@ async def get_world_page(
     user = None
 
     characters_on_world = db.query(Character).filter(Character.world_id == world.id, Character.user_id == logged_in_user_id, Character.validation_hash == None).all()
-    unique_characters = db.query(Character).filter(Character.world_id == world.id).count()
-    unique_users = db.query(Character.user_id).filter(Character.world_id == world.id).distinct().count()
+    # Get active users and their characters
+    active_users = world.get_active_users(db)
+    active_user_count = len(active_users)
+
+    # Get active character count (characters belonging to active users)
+    active_character_count = db.query(Character).filter(
+        Character.world_id == world.id,
+        Character.user_id.in_([user.id for user in active_users]),
+        Character.validation_hash.is_(None)  # Only validated characters
+    ).count()
 
     # Fetch all Spawns associated with this World
     spawns_in_world = db.query(Spawn).filter(Spawn.world_id == world.id).all() # Filter by world.id now
@@ -152,8 +160,8 @@ async def get_world_page(
             "request": request,
             "world": world,
             "breadcrumbs": breadcrumbs,
-            "unique_users_count": unique_users,
-            "total_characters_count": unique_characters,
+            "active_user_count": active_user_count,
+            "active_character_count": active_character_count,
             "characters_on_world": characters_on_world,
             "min_sponsors_required": min_sponsors_required,
             "spawns": spawns_in_world,
@@ -386,6 +394,14 @@ async def get_spawn_detail_page(
     for proposal in pending_proposals:
         proposal.stats = calculate_proposal_stats(proposal)
 
+    active_users = spawn.get_active_users(db)
+    active_user_count = len(active_users)
+    active_character_count = db.query(Character).filter(
+        Character.world_id == world.id,
+        Character.user_id.in_([user.id for user in active_users]),
+        Character.validation_hash.is_(None)  # Only validated characters
+    ).count()
+
     return templates.TemplateResponse(
         "spawn_detail.html",
         {
@@ -393,6 +409,8 @@ async def get_spawn_detail_page(
             "request": request,
             "world": world,
             "spawn": spawn,
+            "active_user_count": active_user_count,
+            "active_character_count": active_character_count,
             "last_approved_permanent_proposal": last_approved_permanent_proposal,
             "last_approved_temporary_proposal": last_approved_temporary_proposal,
             "recently_rejected_proposals": recently_rejected_and_approved_proposals, # Pass the combined list

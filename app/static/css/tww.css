@@ -5,6 +5,11 @@
     height: 60px;
     margin: 20px 0;
     user-select: none;
+    /* Added for visual clarity and consistency with the form's theme */
+    border: 1px solid #4a5568; /* gray-700 */
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    overflow: hidden; /* Important to clip the now indicator if it goes outside */
 }
 
 .tww-hour-track {
@@ -39,19 +44,33 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    background-color: rgba(30, 144, 255, 0.3);
-    border: 2px solid #1e90ff;
+    background-color: rgba(
+        30,
+        144,
+        255,
+        0.3
+    ); /* DodgerBlue with transparency */
+    border: 2px solid #1e90ff; /* DodgerBlue */
     border-radius: 4px;
     cursor: move;
     z-index: 1;
     display: flex;
     align-items: stretch;
-    position: absolute; /* important for resizer positioning */
+    box-sizing: border-box; /* Ensures padding/border are included in width */
+    transition:
+        border-color 0.2s ease-in-out,
+        background-color 0.2s ease-in-out; /* Smooth transitions */
+}
+
+/* New: Invalid selection state */
+.tww-selection.tww-invalid-selection {
+    border-color: #ef4444; /* Red-500 */
+    background-color: rgba(239, 68, 68, 0.3); /* Red with transparency */
 }
 
 .tww-resizer {
     width: 10px;
-    background: #005599;
+    background: #005599; /* Darker blue */
     cursor: ew-resize;
     position: absolute;
     top: 0;
@@ -79,4 +98,17 @@
     font-size: 14px;
     font-family: monospace;
     color: #333;
+    white-space: nowrap; /* Prevent wrapping */
+}
+
+/* New: "Now" indicator bar */
+.tww-now-indicator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px; /* Thin line */
+    background-color: #dc2626; /* Red-600 */
+    z-index: 3; /* Above selection and track */
+    box-shadow: 0 0 5px rgba(220, 38, 38, 0.5); /* Subtle glow */
+    pointer-events: none; /* Ensure it doesn't interfere with mouse events */
 }

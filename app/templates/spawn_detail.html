@@ -26,7 +26,29 @@ breadcrumbs=breadcrumbs) %}
         id="error-area"
         class="hidden bg-red-500 text-white p-3 rounded-md mb-4 text-center"
     ></div>
-
+    {# Add this near the top of the spawn details section #}
+    <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-700/50 p-4 rounded-md mb-6"
+    >
+        <div class="text-center">
+            <p class="text-xl font-bold text-blue-400">
+                {{ active_user_count }}
+            </p>
+            <p class="text-gray-400">Active Users</p>
+        </div>
+        <div class="text-center">
+            <p class="text-xl font-bold text-green-400">
+                {{ active_character_count }}
+            </p>
+            <p class="text-gray-400">Active Characters</p>
+        </div>
+        <div class="text-center">
+            <p class="text-xl font-bold text-purple-400">
+                {{ spawn.hunts|length if spawn.hunts else 0 }}
+            </p>
+            <p class="text-gray-400">Total Hunts</p>
+        </div>
+    </div>
     <div class="space-y-4 text-gray-300">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {# First Section: Spawn Details #}
