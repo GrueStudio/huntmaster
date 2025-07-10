@@ -125,6 +125,7 @@ async def post_bid(
     """
     Handles the submission of a new bid for a spawn.
     Implements the "First Bid Attempt" point assignment (but not deduction yet).
+    Rejects bids that overlap with existing bids from the same user on the same spawn.
     """
     user_id = request.session.get('user_id')
     user = db.query(User).filter(User.id == user_id).first()
@@ -143,7 +144,6 @@ async def post_bid(
     # Validate world and spawn exist
     world = db.query(World).filter(func.lower(World.name) == world_name.lower()).first()
     if not world:
-        # This will still be an HTTPException as it's a fundamental routing/data error
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
 
     spawn = db.query(Spawn).filter(
@@ -152,7 +152,6 @@ async def post_bid(
         Spawn.id == spawn_id # Ensure spawn_id matches for robustness
     ).first()
     if not spawn:
-        # This will still be an HTTPException as it's a fundamental routing/data error
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world.")
 
     # Base URL for redirecting back to the bid form with an error
@@ -179,6 +178,27 @@ async def post_bid(
         return RedirectResponse(url=f"{redirect_url_base}?error=Hunt window end time must be after start time.", status_code=status.HTTP_303_SEE_OTHER)
     if parsed_hunt_window_start < datetime.now(UTC):
         return RedirectResponse(url=f"{redirect_url_base}?error=Hunt window must be in the future.", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Check for overlapping bids from the same user on the same spawn
+    existing_bids = db.query(Bid).filter(
+        Bid.user_id == user.id,
+        Bid.spawn_id == spawn.id,
+        # Check for any overlap with the new bid's window
+        Bid.hunt_window_start < parsed_hunt_window_end,
+        Bid.hunt_window_end > parsed_hunt_window_start
+    ).all()
+
+    if existing_bids:
+        # Format the existing bids for the error message
+        existing_windows = [
+            f"{bid.hunt_window_start.strftime('%Y-%m-%d %H:%M')} to {bid.hunt_window_end.strftime('%Y-%m-%d %H:%M')}"
+            for bid in existing_bids
+        ]
+        error_msg = (
+            f"You already have bids on this spawn that overlap with your requested window: "
+            f"{', '.join(existing_windows)}. Please adjust your hunt window."
+        )
+        return RedirectResponse(url=f"{redirect_url_base}?error={error_msg}", status_code=status.HTTP_303_SEE_OTHER)
 
     # 1. Get or Create User's Spawn-Specific Points
     user_points_entry = db.query(Points).filter(
