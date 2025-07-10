@@ -13,7 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 # Assuming database.py and models.py are in the same 'app' directory
 from database import get_db
-from routers import accounts, characters, spawns, scheduling # Import the new routers
+from routers import accounts, characters, spawns, scheduling, api
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -119,6 +119,7 @@ app.include_router(accounts.router)
 app.include_router(characters.router)
 app.include_router(spawns.router)
 app.include_router(scheduling.router)
+app.include_router(api.router)
 
 # --- Main Routes ---
 
@@ -154,17 +155,31 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     # Individual cards for each Favorite Spawn
     if user.favourite_spawns:
         for spawn in user.favourite_spawns:
-            # For `timedelta` objects (like locking_period), convert to string for simpler display in template
-            # If a more complex formatting is needed, create a custom Jinja2 filter or format here.
+            # Query active bids for this spawn
+            start_time_bids = time.time()
+            current_time = datetime.now(UTC).replace(tzinfo=None)  # Current time in UTC naive
+
+            # Assuming you have a Bid model with spawn_id and deadline fields
+            # You'll need to import Bid from your models
+            from models import Bid
+
+            active_bids_count = db.query(Bid).filter(
+                Bid.spawn_id == spawn.id,
+                Bid.deadline > current_time
+            ).count()
+
+            end_time_bids = time.time()
+            logger.info(f"Active bids query for spawn {spawn.name}: {end_time_bids - start_time_bids:.4f} seconds")
+
             cards.append({
                 "id": f"favorite-spawn-{spawn.id}", # Unique ID for each spawn card
                 "type": "favourite_spawn", # Type for individual spawn cards
                 "title": spawn.name, # Title is the spawn name
-                "data": { # Pass the full spawn object or a dictionary representation of it
-                    "spawn": spawn # Pass the SQLAlchemy object directly, Jinja2 can access its attributes
+                "data": { # Pass the full spawn object and active bids count
+                    "spawn": spawn, # Pass the SQLAlchemy object directly, Jinja2 can access its attributes
+                    "active_bids_count": active_bids_count
                 }
             })
-
 
     breadcrumbs = [
         {'text': 'Dashboard', 'link': None}

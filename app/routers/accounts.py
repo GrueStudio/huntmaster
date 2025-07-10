@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from database import get_db
 from templating import templates
-from models import User, RecoveryToken
+from models import User, RecoveryToken, Bid, Spawn, World
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -246,3 +246,50 @@ async def consume_recovery_token(
             "account_recovery.html",
             {"request": request, "logged_in_user": None, "error": error_message, "message": None, "now_utc_naive": get_now_utc_naive()}
         )
+
+@router.get("/profiles/{username}", response_class=HTMLResponse)
+async def get_user_profile(request: Request, username: str, db: Session = Depends(get_db)):
+    # Get current user for authentication
+    current_user_id = request.session.get('user_id')
+    current_user = None
+    if current_user_id:
+        current_user = db.query(User).filter(User.id == current_user_id).first()
+
+    # Get the profile user
+    profile_user = db.query(User).filter(User.username == username).first()
+    if not profile_user:
+        return templates.TemplateResponse("404.html", {"request": request, "current_user": current_user})
+
+    # Get all bids for this user with related spawn and world data
+    bids = (
+        db.query(Bid)
+        .join(Spawn, Bid.spawn_id == Spawn.id)
+        .join(World, Spawn.world_id == World.id)
+        .filter(Bid.user_id == profile_user.id)
+        .order_by(Bid.hunt_window_start.desc())
+        .all()
+    )
+
+    # Get unique worlds and spawns for filter options
+    worlds = db.query(World).distinct().join(Spawn).join(Bid).filter(Bid.user_id == profile_user.id).all()
+    spawns = db.query(Spawn).distinct().join(Bid).filter(Bid.user_id == profile_user.id).all()
+
+    # Prepare breadcrumbs
+    breadcrumbs = [
+        {'text': 'Dashboard', 'link': '/dashboard'},
+        {'text': f'{profile_user.username}\'s Profile', 'link': None}
+    ]
+
+    return templates.TemplateResponse(
+        "user_profile.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "profile_user": profile_user,
+            "bids": bids,
+            "worlds": worlds,
+            "spawns": spawns,
+            "breadcrumbs": breadcrumbs,
+            "now_utc_naive": get_now_utc_naive()
+        }
+    )

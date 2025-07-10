@@ -49,6 +49,47 @@ breadcrumbs=breadcrumbs) %}
             <p class="text-gray-400">Total Hunts</p>
         </div>
     </div>
+
+    {# Enhanced Claim Schedule Widget with Date Navigation #}
+    <div class="mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-semibold text-white">Claim Schedule</h3>
+            {# Navigation Arrows Only #}
+            <div class="flex items-center space-x-2">
+                <button
+                    id="prev-day-btn"
+                    class="hidden p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors duration-200"
+                    title="Previous Day"
+                >
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div
+                    id="csched-date"
+                    class="flex-1 text-center text-sm font-medium text-gray-300 bg-gray-800 px-4 py-2 rounded-lg border border-gray-600"
+                ></div>
+                <button
+                    id="next-day-btn"
+                    class="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors duration-200"
+                    title="Next Day"
+                >
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        <div id="claim-schedule-widget" class="csched-container">
+            <!-- Claim schedule widget will be initialized here -->
+            <!-- Date display will be injected at the first hour marking -->
+        </div>
+    </div>
+
+    <div class="flex justify-center mb-4">
+        <a
+            href="/worlds/{{ world.name }}/spawns/{{ spawn.name }}/bid"
+            class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-300"
+        >
+            Make a Bid
+        </a>
+    </div>
     <div class="space-y-4 text-gray-300">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {# First Section: Spawn Details #}
@@ -205,7 +246,6 @@ breadcrumbs=breadcrumbs) %}
                 {% endif %}
             </div>
         </div>
-
         {# Combined Proposal Section #}
         <div class="my-8 border-t border-gray-600"></div>
         {# A simple break line #} {# Display Finished Proposals - Renamed
@@ -263,27 +303,13 @@ breadcrumbs=breadcrumbs) %}
             {# Future: Loop through bids here #}
         </div>
 
-        <h3 class="xl font-semibold text-white mt-8 mb-4">Hunt History</h3>
+        <h3 class="text-xl font-semibold text-white mt-8 mb-4">Hunt History</h3>
         <div class="bg-gray-700 p-4 rounded-md">
             <p class="text-gray-400">
                 No hunt history available yet. (Placeholder)
             </p>
             {# Future: Loop through hunts here #}
         </div>
-    </div>
-
-    <div class="text-center mt-8 space-x-4">
-        <a
-            href="/worlds/{{ world.name }}"
-            class="bg-blue-green hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-green focus:ring-opacity-75 transition duration-300"
-            >Back to World</a
-        >
-        <a
-            href="/dashboard"
-            class="bg-reseda-green hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-reseda-green focus:ring-opacity-75 transition duration-300"
-        >
-            Back to Dashboard
-        </a>
     </div>
 </div>
 
@@ -305,8 +331,250 @@ breadcrumbs=breadcrumbs) %}
     }
 </style>
 
+{# Include claim schedule widget CSS and JavaScript #}
+<link
+    rel="stylesheet"
+    href="/static/css/csched.css?v={{ now().timestamp() }}"
+/>
+
 {# Externalized JavaScript for Spawn Change Proposal voting logic (kept local)
 #}
 <script src="/static/scp_vote.js?v={{ now().timestamp() }}"></script>
+<script src="/static/js/csched.js?v={{ now().timestamp() }}"></script>
+
+{# Enhanced JavaScript for Spawn Details with Date Navigation #} // Replace the
+existing JavaScript section in spawn_detail.html with this:
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Date navigation state
+        let currentDate = new Date();
+        let isViewingTomorrow = false;
+
+        // Cache for API responses
+        const dataCache = new Map();
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+        // DOM elements
+        const prevDayBtn = document.getElementById('prev-day-btn');
+        const nextDayBtn = document.getElementById('next-day-btn');
+        const container = document.getElementById('claim-schedule-widget');
+        const cschedDateDiv = document.getElementById('csched-date');
+
+        // Initialize the widget
+        const widget = new ClaimScheduleWidget(container, {
+            lockingPeriodMinutes: {{ spawn.locking_period.total_seconds() // 60 | int }}
+        });
+
+        // Helper function to format date for display
+        function formatDateForSchedule(date) {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            if (date.toDateString() === today.toDateString()) {
+                return 'Today - ' + date.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } else if (date.toDateString() === tomorrow.toDateString()) {
+                return 'Tomorrow - ' + date.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } else {
+                return date.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+        }
+
+        // Function to update the date display
+        function updateDateDisplay() {
+            if (cschedDateDiv) {
+                cschedDateDiv.textContent = formatDateForSchedule(currentDate);
+            }
+        }
+
+        // Helper function to format date for API
+        function formatDateForAPI(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        // Cache management functions
+        function isCacheValid(cacheEntry) {
+            if (!cacheEntry) return false;
+            const now = Date.now();
+            return (now - cacheEntry.timestamp) < CACHE_DURATION;
+        }
+
+        function getCachedData(dateKey) {
+            const cacheEntry = dataCache.get(dateKey);
+            if (isCacheValid(cacheEntry)) {
+                console.log('Using cached data for:', dateKey);
+                return cacheEntry.data;
+            }
+            return null;
+        }
+
+        function setCachedData(dateKey, data) {
+            dataCache.set(dateKey, {
+                data: data,
+                timestamp: Date.now()
+            });
+            console.log('Data cached for:', dateKey);
+        }
+
+        // Update UI based on current date
+        function updateDateUI() {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            isViewingTomorrow = currentDate.toDateString() === tomorrow.toDateString();
+
+            // Show/hide navigation buttons
+            if (isViewingTomorrow) {
+                prevDayBtn.classList.remove('hidden');
+                nextDayBtn.classList.add('hidden');
+            } else {
+                prevDayBtn.classList.add('hidden');
+                nextDayBtn.classList.remove('hidden');
+            }
+
+            // Update the date display
+            updateDateDisplay();
+
+            // IMPORTANT: Update the widget's display date
+            widget.setDisplayDate(currentDate);
+        }
+
+        // Process and load data into widget
+        function loadDataIntoWidget(data) {
+            console.log('Loading data into widget:', data);
+
+            // Convert API response to widget format
+            const widgetData = {
+                bids: data.bids.map(bid => ({
+                    id: bid.id,
+                    user_id: bid.user_id,
+                    userId: bid.user_id,
+                    spawnId: bid.spawn_id,
+                    points: bid.bid_points,
+                    bid_points: bid.bid_points,
+                    start: bid.hunt_window_start,
+                    end: bid.hunt_window_end,
+                    hunt_window_start: bid.hunt_window_start,
+                    hunt_window_end: bid.hunt_window_end,
+                    claim_time: bid.claim_time,
+                    claimTime: bid.claim_time,
+                    status: bid.status,
+                    userName: data.users.find(u => u.id === bid.user_id)?.username || 'Unknown User'
+                })),
+                timeslots: data.timeslots ? data.timeslots.map(ts => ({
+                    id: ts.id,
+                    userId: ts.user_id,
+                    spawnId: ts.spawn_id,
+                    start: ts.start_time,
+                    end: ts.end_time,
+                    bidId: ts.bid_id
+                })) : [],
+                hunts: data.hunts ? data.hunts.map(hunt => ({
+                    id: hunt.id,
+                    userId: hunt.user_id,
+                    spawnId: hunt.spawn_id,
+                    start: hunt.start_time,
+                    end: hunt.end_time,
+                    bidId: hunt.bid_id
+                })) : [],
+                users: data.users || []
+            };
+
+            // Load data into widget
+            widget.loadData(widgetData);
+        }
+
+        // Load schedule data from API with caching
+        async function loadScheduleData() {
+            const dateParam = formatDateForAPI(currentDate);
+            const cacheKey = `${dateParam}_spawn_{{ spawn.id }}`;
+
+            // Check cache first
+            const cachedData = getCachedData(cacheKey);
+            if (cachedData) {
+                loadDataIntoWidget(cachedData);
+                return;
+            }
+
+            console.log('Loading schedule data for:', dateParam);
+
+            try {
+                const response = await fetch(`/api/schedule?spawn_id={{ spawn.id }}&date=${dateParam}&page_size=50`);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch schedule data: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Raw API response:', data);
+
+                // Cache the response
+                setCachedData(cacheKey, data);
+
+                // Load data into widget
+                loadDataIntoWidget(data);
+
+            } catch (error) {
+                console.error('Error loading schedule data:', error);
+                widget.clear();
+
+                // Show error message
+                if (cschedDateDiv) {
+                    const originalText = cschedDateDiv.textContent;
+                    cschedDateDiv.textContent = 'Error loading data';
+                    cschedDateDiv.classList.add('text-red-400');
+
+                    setTimeout(() => {
+                        cschedDateDiv.textContent = originalText;
+                        cschedDateDiv.classList.remove('text-red-400');
+                    }, 3000);
+                }
+            }
+        }
+
+        // Event listeners for navigation buttons
+        nextDayBtn.addEventListener('click', function() {
+            if (!isViewingTomorrow) {
+                currentDate.setDate(currentDate.getDate() + 1);
+                updateDateUI(); // This now calls widget.setDisplayDate()
+                loadScheduleData();
+            }
+        });
+
+        prevDayBtn.addEventListener('click', function() {
+            if (isViewingTomorrow) {
+                currentDate.setDate(currentDate.getDate() - 1);
+                updateDateUI(); // This now calls widget.setDisplayDate()
+                loadScheduleData();
+            }
+        });
+
+        // Auto-refresh data every 5 minutes
+        setInterval(() => {
+            console.log('Auto-refreshing current data...');
+            const dateParam = formatDateForAPI(currentDate);
+            const cacheKey = `${dateParam}_spawn_{{ spawn.id }}`;
+            dataCache.delete(cacheKey);
+            loadScheduleData();
+        }, 5 * 60 * 1000);
+
+        // Initialize the page
+        updateDateUI();
+        loadScheduleData();
+    });
+</script>
 
 {% endcall %}

@@ -25,6 +25,15 @@
     });
   };
 
+  // Mobile detection helper
+  function isMobile() {
+    return (
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent,
+      ) || window.innerWidth <= 768
+    );
+  }
+
   // Initialize all widgets on the page.
   const containers = document.querySelectorAll(".tww-container");
 
@@ -63,9 +72,22 @@
 
     // Drag state variables.
     let dragType = null; // 'move', 'resize-left', 'resize-right', 'new-selection'
-    let dragStartX = 0; // Mouse X position when drag started.
+    let dragStartX = 0; // Mouse/touch X position when drag started.
     let dragStartSelStart = 0; // Selection's left position when drag started.
     let dragStartSelEnd = 0; // Selection's right position when drag started.
+    let touchStartTime = 0; // Track touch start time for tap detection
+    let lastTouchX = 0; // Track last touch position for momentum
+
+    /**
+     * Get the X coordinate from mouse or touch event
+     * @param {Event} e - Mouse or touch event
+     * @returns {number} X coordinate
+     */
+    function getEventX(e) {
+      return e.type.includes("touch")
+        ? e.touches[0]?.clientX || e.changedTouches[0]?.clientX
+        : e.clientX;
+    }
 
     /**
      * Updates the visual display of the selection window and its time label.
@@ -157,11 +179,19 @@
     animateNowIndicator(); // Start the animation loop
 
     /**
-     * Handles the mouse down event for starting a drag or resize operation.
-     * @param {MouseEvent} e - The mouse event.
+     * Handles the start of interaction (mouse down or touch start).
+     * @param {Event} e - The event (mouse or touch).
      */
-    function onMouseDown(e) {
+    function onInteractionStart(e) {
       e.preventDefault();
+
+      // For touch events, record the start time
+      if (e.type === "touchstart") {
+        touchStartTime = Date.now();
+      }
+
+      const eventX = getEventX(e);
+
       if (e.target.classList.contains("tww-resizer-left")) {
         dragType = "resize-left";
       } else if (e.target.classList.contains("tww-resizer-right")) {
@@ -169,16 +199,19 @@
       } else if (e.target === selection) {
         dragType = "move";
       } else {
-        // If clicking on the track background, initiate a new selection.
+        // If clicking/tapping on the track background, initiate a new selection.
         dragType = "new-selection";
-        const clickX = e.clientX - container.getBoundingClientRect().left;
+        const clickX = eventX - container.getBoundingClientRect().left;
 
         // Ensure new selection starts at or after "now"
         const nowPx = getPixelPositionFromDate(new Date());
         selStart = Math.max(nowPx, clickX);
 
         // Set end based on new start and min duration
-        selEnd = selStart + (externalMinSelectionWidthPx || 40); // Use external min width, fallback to 40px.
+        const minWidthPx = isMobile()
+          ? Math.max(externalMinSelectionWidthPx || 40, 60)
+          : externalMinSelectionWidthPx || 40;
+        selEnd = selStart + minWidthPx;
 
         // Ensure new selection doesn't go out of bounds or past 12 hours from now
         const maxAllowedEndDateTime = new Date(
@@ -189,29 +222,39 @@
         selEnd = Math.min(selEnd, maxAllowedEndPx, containerWidth);
 
         // If after constraining, the selection is too small, adjust start
-        if (selEnd - selStart < (externalMinSelectionWidthPx || 40)) {
-          selStart = selEnd - (externalMinSelectionWidthPx || 40);
+        if (selEnd - selStart < minWidthPx) {
+          selStart = selEnd - minWidthPx;
           if (selStart < nowPx) selStart = nowPx; // Ensure it still doesn't go before now
         }
       }
+
       if (dragType) {
-        dragStartX = e.clientX;
+        dragStartX = eventX;
         dragStartSelStart = selStart;
         dragStartSelEnd = selEnd;
         document.body.style.userSelect = "none"; // Prevent text selection during drag.
+
+        // Prevent scrolling on mobile during interaction
+        if (isMobile()) {
+          document.body.style.overflow = "hidden";
+        }
       }
+
       updateDisplay(); // Update immediately for new selection or initial state.
     }
 
     /**
-     * Handles the mouse move event for dragging or resizing the selection.
-     * @param {MouseEvent} e - The mouse event.
+     * Handles the move during interaction (mouse move or touch move).
+     * @param {Event} e - The event (mouse or touch).
      */
-    function onMouseMove(e) {
+    function onInteractionMove(e) {
       if (!dragType) return; // Only proceed if a drag/resize operation is active.
 
-      const dx = e.clientX - dragStartX; // Change in X position since drag started.
-      const minWidthPx = externalMinSelectionWidthPx || 40; // Use external min width, fallback to 40px.
+      const eventX = getEventX(e);
+      const dx = eventX - dragStartX; // Change in X position since drag started.
+      const minWidthPx = isMobile()
+        ? Math.max(externalMinSelectionWidthPx || 40, 60)
+        : externalMinSelectionWidthPx || 40;
       const nowPx = getPixelPositionFromDate(new Date()); // Current "now" position
 
       // Calculate the maximum allowed end pixel based on 12 hours from now
@@ -254,7 +297,7 @@
         // For a new selection initiated by dragging on the background.
         // The user is effectively setting the right edge of the new window.
         let currentXRelativeToContainer =
-          e.clientX - container.getBoundingClientRect().left;
+          eventX - container.getBoundingClientRect().left;
         let newSelEnd = Math.max(
           selStart + minWidthPx,
           Math.min(
@@ -265,29 +308,80 @@
         ); // Constrain by maxAllowedEndPx
         selEnd = newSelEnd;
       }
+
+      lastTouchX = eventX;
       updateDisplay(); // Update the display after position changes.
     }
 
     /**
-     * Handles the mouse up event, ending any drag or resize operation.
+     * Handles the end of interaction (mouse up or touch end).
+     * @param {Event} e - The event (mouse or touch).
      */
-    function onMouseUp() {
+    function onInteractionEnd(e) {
+      // For touch events, check if this was a quick tap (< 150ms)
+      if (e.type === "touchend" && Date.now() - touchStartTime < 150) {
+        // This was a tap, not a drag - could implement tap-to-select behavior here
+      }
+
       dragType = null; // Reset drag type.
       document.body.style.userSelect = ""; // Re-enable text selection.
+
+      // Re-enable scrolling on mobile
+      if (isMobile()) {
+        document.body.style.overflow = "";
+      }
     }
 
-    // Attach event listeners.
-    selection.addEventListener("mousedown", onMouseDown);
-    container
-      .querySelector(".tww-resizer-left")
-      .addEventListener("mousedown", onMouseDown);
-    container
-      .querySelector(".tww-resizer-right")
-      .addEventListener("mousedown", onMouseDown);
-    track.addEventListener("mousedown", onMouseDown); // Listen on the track for new selections.
+    // Attach event listeners for both mouse and touch events
+    const startEvents = isMobile() ? ["touchstart"] : ["mousedown"];
+    const moveEvents = isMobile() ? ["touchmove"] : ["mousemove"];
+    const endEvents = isMobile() ? ["touchend"] : ["mouseup"];
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    // Selection event listeners
+    startEvents.forEach((eventType) => {
+      selection.addEventListener(eventType, onInteractionStart, {
+        passive: false,
+      });
+    });
+
+    // Resizer event listeners
+    startEvents.forEach((eventType) => {
+      container
+        .querySelector(".tww-resizer-left")
+        .addEventListener(eventType, onInteractionStart, { passive: false });
+      container
+        .querySelector(".tww-resizer-right")
+        .addEventListener(eventType, onInteractionStart, { passive: false });
+    });
+
+    // Track event listeners for new selections
+    startEvents.forEach((eventType) => {
+      track.addEventListener(eventType, onInteractionStart, { passive: false });
+    });
+
+    // Global move and end event listeners
+    moveEvents.forEach((eventType) => {
+      window.addEventListener(eventType, onInteractionMove, { passive: false });
+    });
+
+    endEvents.forEach((eventType) => {
+      window.addEventListener(eventType, onInteractionEnd, { passive: false });
+    });
+
+    // Add legacy mouse event support for desktop even when mobile is detected
+    if (isMobile()) {
+      // Still support mouse events for hybrid devices
+      selection.addEventListener("mousedown", onInteractionStart);
+      container
+        .querySelector(".tww-resizer-left")
+        .addEventListener("mousedown", onInteractionStart);
+      container
+        .querySelector(".tww-resizer-right")
+        .addEventListener("mousedown", onInteractionStart);
+      track.addEventListener("mousedown", onInteractionStart);
+      window.addEventListener("mousemove", onInteractionMove);
+      window.addEventListener("mouseup", onInteractionEnd);
+    }
 
     // Expose value getters on the container element for external access.
     // These getters now return Date objects.
@@ -351,7 +445,7 @@
     // to be able to trigger updates on specific widget instances.
     container._twwInstance = { updateDisplay: updateDisplay };
 
-    // Add a ResizeObserver to update containerWidth if the widget's size changes (e.g., window resize).
+    // Add a ResizeObserver to update containerWidth if the widget's size changes (e.g., window resize, orientation change).
     const resizeObserver = new ResizeObserver((entries) => {
       for (let entry of entries) {
         if (entry.target === container) {
@@ -362,5 +456,17 @@
       }
     });
     resizeObserver.observe(container);
+
+    // Handle orientation changes on mobile
+    if (isMobile()) {
+      window.addEventListener("orientationchange", () => {
+        // Delay the update to allow the browser to adjust the viewport
+        setTimeout(() => {
+          containerWidth = container.offsetWidth;
+          hourWidth = containerWidth / totalHours;
+          updateDisplay();
+        }, 200);
+      });
+    }
   });
 })();

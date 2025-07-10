@@ -1,0 +1,404 @@
+{% from 'macros/_layout.html' import layout %} {% call
+layout(title=profile_user.username + "'s Profile - HuntMaster",
+current_user=current_user, breadcrumbs=breadcrumbs) %}
+
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-gray-800 rounded-lg shadow-xl p-6">
+        <div class="flex items-center mb-6">
+            <div
+                class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mr-4"
+            >
+                {{ profile_user.username[0].upper() }}
+            </div>
+            <div>
+                <h1 class="text-3xl font-bold text-white">
+                    {{ profile_user.username }}
+                </h1>
+                <p class="text-gray-400">Member Profile</p>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <h2 class="text-2xl font-semibold text-white mb-4">Bid History</h2>
+
+            <!-- Filters -->
+            <div class="flex flex-wrap gap-4 mb-4">
+                <div class="flex items-center">
+                    <label for="worldFilter" class="text-gray-300 mr-2"
+                        >World:</label
+                    >
+                    <select
+                        id="worldFilter"
+                        class="bg-gray-700 text-white px-3 py-2 rounded"
+                    >
+                        <option value="">All Worlds</option>
+                        {% for world in worlds %}
+                        <option value="{{ world.name }}">
+                            {{ world.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex items-center">
+                    <label for="spawnFilter" class="text-gray-300 mr-2"
+                        >Spawn:</label
+                    >
+                    <select
+                        id="spawnFilter"
+                        class="bg-gray-700 text-white px-3 py-2 rounded"
+                    >
+                        <option value="">All Spawns</option>
+                        {% for spawn in spawns %}
+                        <option value="{{ spawn.name }}">
+                            {{ spawn.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex items-center">
+                    <label for="statusFilter" class="text-gray-300 mr-2"
+                        >Status:</label
+                    >
+                    <select
+                        id="statusFilter"
+                        class="bg-gray-700 text-white px-3 py-2 rounded"
+                    >
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="successful">Successful</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                </div>
+
+                <button
+                    id="clearFilters"
+                    class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                    Clear Filters
+                </button>
+            </div>
+
+            <!-- Bid History Table -->
+            <div
+                class="bg-gray-700 rounded-lg overflow-hidden"
+                style="height: 320px"
+            >
+                <table id="bidTable" class="w-full">
+                    <thead class="bg-gray-600 sticky top-0">
+                        <tr>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="start_time"
+                            >
+                                Hunt Window Start
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="claim_time"
+                            >
+                                Claim Time
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="spawn_name"
+                            >
+                                Spawn Name
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="world_name"
+                            >
+                                World Name
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="bid_points"
+                            >
+                                Bid Points
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th
+                                class="px-4 py-3 text-left text-white cursor-pointer hover:bg-gray-500"
+                                data-sort="status"
+                            >
+                                Status
+                                <span class="sort-indicator"></span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody
+                        id="bidTableBody"
+                        class="overflow-y-auto"
+                        style="height: 260px; display: block"
+                    >
+                        {% for bid in bids %} {% set claim_deadline =
+                        bid.hunt_window_end.replace(tzinfo=None) -
+                        bid.claim_time %}
+                        <tr
+                            class="bid-row border-b border-gray-600 hover:bg-gray-600"
+                            data-world="{{ bid.spawn.world.name }}"
+                            data-spawn="{{ bid.spawn.name }}"
+                            data-status="{{ 'successful' if bid.hunt or bid.timeslots else ('failed' if claim_deadline < now_utc_naive else 'active') }}"
+                        >
+                            <td
+                                class="px-4 py-3 text-white"
+                                data-sort-value="{{ bid.hunt_window_start.isoformat() }}"
+                            >
+                                {{ bid.hunt_window_start.strftime('%Y-%m-%d
+                                %H:%M') }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-white"
+                                data-sort-value="{{ bid.claim_time.total_seconds() }}"
+                            >
+                                {{ (bid.claim_time.total_seconds() / 60) | int
+                                }} min
+                            </td>
+                            <td
+                                class="px-4 py-3 text-white"
+                                data-sort-value="{{ bid.spawn.name }}"
+                            >
+                                {{ bid.spawn.name }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-white"
+                                data-sort-value="{{ bid.spawn.world.name }}"
+                            >
+                                {{ bid.spawn.world.name }}
+                            </td>
+                            <td
+                                class="px-4 py-3 text-white"
+                                data-sort-value="{{ bid.bid_points }}"
+                            >
+                                {{ bid.bid_points }}
+                            </td>
+                            <td class="px-4 py-3">
+                                {% set status = 'successful' if bid.hunt or
+                                bid.timeslots else ('failed' if claim_deadline <
+                                now_utc_naive else 'active') %}
+                                <span
+                                    class="px-2 py-1 rounded text-xs font-semibold {% if status == 'successful' %}bg-green-600 text-green-100 {% elif status == 'failed' %}bg-red-600 text-red-100 {% else %}bg-blue-600 text-blue-100{% endif %}"
+                                    data-sort-value="{{ status }}"
+                                >
+                                    {{ status.title() }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                {% if not bids %}
+                <div class="flex items-center justify-center h-40">
+                    <p class="text-gray-400">No bid history found.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    class BidHistoryTable {
+        constructor() {
+            this.currentSort = { column: "start_time", direction: "desc" };
+            this.init();
+        }
+
+        init() {
+            this.setupSorting();
+            this.setupFilters();
+            this.updateSortIndicators();
+        }
+
+        setupSorting() {
+            const headers = document.querySelectorAll(
+                "#bidTable th[data-sort]",
+            );
+            headers.forEach((header) => {
+                header.addEventListener("click", () => {
+                    const column = header.dataset.sort;
+                    this.sort(column);
+                });
+            });
+        }
+
+        setupFilters() {
+            const worldFilter = document.getElementById("worldFilter");
+            const spawnFilter = document.getElementById("spawnFilter");
+            const statusFilter = document.getElementById("statusFilter");
+            const clearFilters = document.getElementById("clearFilters");
+
+            [worldFilter, spawnFilter, statusFilter].forEach((filter) => {
+                filter.addEventListener("change", () => this.applyFilters());
+            });
+
+            clearFilters.addEventListener("click", () => {
+                worldFilter.value = "";
+                spawnFilter.value = "";
+                statusFilter.value = "";
+                this.applyFilters();
+            });
+        }
+
+        sort(column) {
+            if (this.currentSort.column === column) {
+                this.currentSort.direction =
+                    this.currentSort.direction === "asc" ? "desc" : "asc";
+            } else {
+                this.currentSort = { column, direction: "desc" };
+            }
+
+            const tbody = document.getElementById("bidTableBody");
+            const rows = Array.from(tbody.querySelectorAll(".bid-row"));
+
+            rows.sort((a, b) => {
+                const aValue = this.getSortValue(a, column);
+                const bValue = this.getSortValue(b, column);
+
+                let comparison = 0;
+                if (aValue > bValue) comparison = 1;
+                if (aValue < bValue) comparison = -1;
+
+                return this.currentSort.direction === "asc"
+                    ? comparison
+                    : -comparison;
+            });
+
+            // Clear and re-append sorted rows
+            tbody.innerHTML = "";
+            rows.forEach((row) => tbody.appendChild(row));
+
+            this.updateSortIndicators();
+        }
+
+        getSortValue(row, column) {
+            const cell = row.querySelector(
+                `td[data-sort-value]:nth-child(${this.getColumnIndex(column)})`,
+            );
+            if (!cell) return "";
+
+            const value = cell.dataset.sortValue;
+
+            // Handle different data types
+            if (column === "start_time") return new Date(value);
+            if (column === "claim_time" || column === "bid_points")
+                return parseFloat(value);
+            return value.toLowerCase();
+        }
+
+        getColumnIndex(column) {
+            const columns = [
+                "start_time",
+                "claim_time",
+                "spawn_name",
+                "world_name",
+                "bid_points",
+                "status",
+            ];
+            return columns.indexOf(column) + 1;
+        }
+
+        updateSortIndicators() {
+            // Clear all indicators
+            document
+                .querySelectorAll(".sort-indicator")
+                .forEach((indicator) => {
+                    indicator.textContent = "";
+                });
+
+            // Set current sort indicator
+            const currentHeader = document.querySelector(
+                `th[data-sort="${this.currentSort.column}"] .sort-indicator`,
+            );
+            if (currentHeader) {
+                currentHeader.textContent =
+                    this.currentSort.direction === "asc" ? " ↑" : " ↓";
+            }
+        }
+
+        applyFilters() {
+            const worldFilter = document.getElementById("worldFilter").value;
+            const spawnFilter = document.getElementById("spawnFilter").value;
+            const statusFilter = document.getElementById("statusFilter").value;
+
+            const rows = document.querySelectorAll(".bid-row");
+
+            rows.forEach((row) => {
+                const world = row.dataset.world;
+                const spawn = row.dataset.spawn;
+                const status = row.dataset.status;
+
+                const worldMatch = !worldFilter || world === worldFilter;
+                const spawnMatch = !spawnFilter || spawn === spawnFilter;
+                const statusMatch = !statusFilter || status === statusFilter;
+
+                if (worldMatch && spawnMatch && statusMatch) {
+                    row.style.display = "";
+                } else {
+                    row.style.display = "none";
+                }
+            });
+        }
+    }
+
+    // Initialize the table when the page loads
+    document.addEventListener("DOMContentLoaded", () => {
+        new BidHistoryTable();
+    });
+</script>
+
+<style>
+    #bidTable tbody {
+        display: block;
+        height: 260px;
+        overflow-y: auto;
+    }
+
+    #bidTable thead,
+    #bidTable tbody tr {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    #bidTable th,
+    #bidTable td {
+        width: 16.66%;
+    }
+
+    .sort-indicator {
+        font-size: 12px;
+        color: #9ca3af;
+    }
+
+    .bid-row:hover {
+        background-color: #4b5563 !important;
+    }
+
+    /* Custom scrollbar */
+    #bidTableBody::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    #bidTableBody::-webkit-scrollbar-track {
+        background: #374151;
+    }
+
+    #bidTableBody::-webkit-scrollbar-thumb {
+        background: #6b7280;
+        border-radius: 4px;
+    }
+
+    #bidTableBody::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+    }
+</style>
+
+{% endcall %}

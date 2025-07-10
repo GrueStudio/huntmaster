@@ -1,0 +1,266 @@
+/* Claim Schedule Widget - Dark Theme */
+.csched-container {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #374151;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    height: auto;
+    max-height: 400px;
+    position: relative;
+    margin: 1.5rem 0;
+    background-color: #1f2937;
+    color: #e5e7eb;
+}
+
+/* Hour marks container - grid layout */
+.bsched-hourmarks {
+    display: grid;
+    grid-template-columns: 120px repeat(24, 1fr);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: #111827;
+    border-bottom: 1px solid #374151;
+    height: 40px;
+}
+
+/* Hour mark label (left side) */
+.hour-mark-label {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    padding-left: 1rem;
+    font-weight: bold;
+    font-size: 0.875rem;
+    background-color: #111827;
+}
+
+/* Hour mark ticks */
+.hour-mark {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    position: relative;
+    border-right: 1px solid #374151;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 5px;
+}
+
+/* Alternate hour background colors */
+.hour-mark:nth-child(odd) {
+    background-color: #1a202c;
+}
+.hour-mark:nth-child(even) {
+    background-color: #111827;
+}
+
+/* Hour marker lines extending down */
+.hour-mark::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 40px);
+    border-right: 1px solid #2d3748;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Current time indicator */
+.current-time {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    background-color: #ef4444;
+    height: 100%;
+    z-index: 200;
+}
+
+/* Schedule area */
+.csched-schedule {
+    display: grid;
+    grid-template-columns: 120px repeat(24, 1fr);
+    position: sticky;
+    top: 40px;
+    z-index: 90;
+    background-color: #1f2937;
+    border-bottom: 1px solid #374151;
+    height: 60px;
+    align-items: center;
+}
+
+.csched-sched-label {
+    grid-column: 1;
+    font-weight: bold;
+    padding-left: 1rem;
+    background-color: #1f2937;
+    z-index: 95;
+}
+
+/* Hunt and TimeSlot items */
+.hunt-item,
+.timeslot-item {
+    position: absolute;
+    height: 40px;
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+/* Confirmed hunt (after locking period) */
+.hunt-item {
+    background-color: #059669;
+    border: 2px solid #047857;
+}
+
+/* Temporary timeslot (before locking period) */
+.timeslot-item {
+    background-color: #0e7490;
+    border: 2px dashed #155e75;
+    opacity: 0.9;
+}
+
+/* Failed bid (hunt_window_end - claim_time is before now) */
+.bid-window.failed {
+    background-color: rgba(239, 68, 68, 0.3);
+    border: 1px dashed #ef4444;
+}
+
+/* Active bid (still in contention) */
+.bid-window.active {
+    background-color: rgba(59, 130, 246, 0.3);
+    border: 1px dashed #3b82f6;
+}
+
+/* Successful bid (won the slot) */
+.bid-window.successful {
+    background-color: rgba(34, 197, 94, 0.3);
+    border: 1px dashed #22c55e;
+}
+
+/* User bids sections */
+.csched-user-bids {
+    display: grid;
+    grid-template-columns: 120px repeat(24, 1fr);
+    position: relative;
+    height: 60px;
+    align-items: center;
+    border-bottom: 1px solid #374151;
+}
+
+.csched-my-bids {
+    position: sticky;
+    top: 100px;
+    z-index: 80;
+    background-color: #111827;
+    display: grid;
+    grid-template-columns: 120px repeat(24, 1fr);
+    height: 60px;
+    align-items: center;
+    border-bottom: 1px solid #374151;
+}
+
+.csched-user-label {
+    grid-column: 1;
+    font-weight: bold;
+    padding-left: 1rem;
+    background-color: inherit;
+    z-index: 85;
+    display: flex;
+    align-items: center;
+}
+
+.user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background-color: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.75rem;
+}
+
+/* Avatar markers for schedule items */
+.schedule-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.8rem;
+    position: relative;
+    z-index: 10;
+}
+
+/* Bid window items */
+.bid-window {
+    position: absolute;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+/* Scrollable area for other bids */
+.csched-other-bids-container {
+    overflow-y: auto;
+    height: 180px; /* 3 rows × 60px each */
+    background-color: #1f2937;
+    flex-shrink: 0;
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: absolute;
+    background-color: #111827;
+    color: #f3f4f6;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+    border: 1px solid #374151;
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .bsched-hourmarks,
+    .csched-schedule,
+    .csched-user-bids {
+        grid-template-columns: 80px repeat(24, 1fr);
+    }
+
+    .hour-mark-label,
+    .csched-sched-label,
+    .csched-user-label {
+        padding-left: 0.5rem;
+        font-size: 0.75rem;
+    }
+}

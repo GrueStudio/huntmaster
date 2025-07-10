@@ -5,11 +5,30 @@
     height: 60px;
     margin: 20px 0;
     user-select: none;
-    /* Added for visual clarity and consistency with the form's theme */
-    border: 1px solid #4a5568; /* gray-700 */
+    /* Dark theme styling to match bg-gray-800 */
+    background-color: #1f2937; /* gray-800 */
+    border: 1px solid #374151; /* gray-700 */
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
     overflow: hidden; /* Important to clip the now indicator if it goes outside */
+    /* Mobile optimizations */
+    touch-action: pan-y; /* Allow vertical scrolling but prevent horizontal pan */
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+    .tww-container {
+        height: 70px; /* Slightly taller for easier touch interaction */
+        margin: 15px 0;
+        border-radius: 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tww-container {
+        height: 80px; /* Even taller on small screens */
+        margin: 10px 0;
+    }
 }
 
 .tww-hour-track {
@@ -27,17 +46,18 @@
     height: 100%;
 }
 
+/* Day and night time blocks with dark theme */
 .tww-am1 {
-    background-color: #ffffff;
+    background-color: #4b5563; /* gray-600 - lighter day shade */
 }
 .tww-am2 {
-    background-color: #fff9d1;
+    background-color: #6b7280; /* gray-500 - darker day shade */
 }
 .tww-pm1 {
-    background-color: #e6e6e6;
+    background-color: #374151; /* gray-700 - lighter night shade */
 }
 .tww-pm2 {
-    background-color: #cfe0f4;
+    background-color: #1f2937; /* gray-800 - darker night shade */
 }
 
 .tww-selection {
@@ -45,12 +65,12 @@
     top: 0;
     bottom: 0;
     background-color: rgba(
-        30,
-        144,
-        255,
+        59,
+        130,
+        246,
         0.3
-    ); /* DodgerBlue with transparency */
-    border: 2px solid #1e90ff; /* DodgerBlue */
+    ); /* blue-500 with transparency for dark theme */
+    border: 2px solid #3b82f6; /* blue-500 */
     border-radius: 4px;
     cursor: move;
     z-index: 1;
@@ -60,6 +80,15 @@
     transition:
         border-color 0.2s ease-in-out,
         background-color 0.2s ease-in-out; /* Smooth transitions */
+    /* Mobile touch optimizations */
+    min-height: 44px; /* iOS recommended minimum touch target size */
+}
+
+/* Mobile cursor adjustments */
+@media (max-width: 768px) {
+    .tww-selection {
+        cursor: default; /* Remove move cursor on mobile */
+    }
 }
 
 /* New: Invalid selection state */
@@ -70,12 +99,28 @@
 
 .tww-resizer {
     width: 10px;
-    background: #005599; /* Darker blue */
+    background: #1d4ed8; /* blue-700 - darker blue for dark theme */
     cursor: ew-resize;
     position: absolute;
     top: 0;
     bottom: 0;
     z-index: 2;
+    /* Mobile touch optimizations */
+    min-width: 20px; /* Wider touch target on mobile */
+}
+
+/* Mobile resizer adjustments */
+@media (max-width: 768px) {
+    .tww-resizer {
+        width: 20px; /* Wider for easier touch interaction */
+        cursor: default; /* Remove resize cursor on mobile */
+    }
+}
+
+@media (max-width: 480px) {
+    .tww-resizer {
+        width: 24px; /* Even wider on small screens */
+    }
 }
 
 .tww-resizer-left {
@@ -90,15 +135,39 @@
     border-bottom-right-radius: 4px;
 }
 
-.tww-time-label {
-    position: absolute;
-    bottom: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 14px;
-    font-family: monospace;
-    color: #333;
-    white-space: nowrap; /* Prevent wrapping */
+.tww-time-label,
+.tww-time-label-visible {
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    bottom: -35px !important;
+    font-size: 1.1rem !important;
+    font-weight: bold !important;
+    color: #1e90ff !important;
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+    white-space: nowrap !important;
+    z-index: 10 !important;
+    display: block !important;
+    visibility: visible !important;
+    pointer-events: none !important;
+}
+
+/* Mobile time label adjustments */
+@media (max-width: 768px) {
+    .tww-time-label {
+        font-size: 16px; /* Larger text for better readability */
+        bottom: -28px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tww-time-label {
+        font-size: 18px; /* Even larger on small screens */
+        bottom: -32px;
+    }
 }
 
 /* New: "Now" indicator bar */
@@ -107,8 +176,16 @@
     top: 0;
     bottom: 0;
     width: 2px; /* Thin line */
-    background-color: #dc2626; /* Red-600 */
+    background-color: #ef4444; /* red-500 - slightly softer red for dark theme */
     z-index: 3; /* Above selection and track */
-    box-shadow: 0 0 5px rgba(220, 38, 38, 0.5); /* Subtle glow */
+    box-shadow: 0 0 5px rgba(239, 68, 68, 0.6); /* Enhanced glow for dark theme */
     pointer-events: none; /* Ensure it doesn't interfere with mouse events */
+}
+
+/* Mobile now indicator adjustments */
+@media (max-width: 768px) {
+    .tww-now-indicator {
+        width: 3px; /* Slightly thicker for better visibility */
+        box-shadow: 0 0 6px rgba(239, 68, 68, 0.7); /* More prominent glow for dark theme */
+    }
 }

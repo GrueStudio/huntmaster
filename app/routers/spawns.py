@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, UTC, time
 import pytz
 
 from database import get_db
-from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote # Import necessary models and enums
+from models import World, Character, Spawn, SpawnProposal, ProposalStatus, SpawnChangeProposal, User, VoteType, Vote, Bid # Import necessary models and enums
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -336,6 +336,22 @@ async def get_spawn_detail_page(
         SpawnChangeProposal.end_time >= now_utc
     ).order_by(SpawnChangeProposal.approved_at.desc()).first()
 
+    # Decide the current Bid settings.
+    bid_settings = {
+        'locking_period': spawn.locking_period,
+        'claim_time_min': spawn.claim_time_min,
+        'claim_time_max': spawn.claim_time_max,
+        'deprioratize_time': spawn.deprioratize_time
+    }
+    latp = last_approved_temporary_proposal
+    if latp:
+        bid_settings = {
+            'locking_period': latp.locking_period,
+            'claim_time_min': latp.claim_time_min,
+            'claim_time_max': latp.claim_time_max,
+            'deprioratize_time': latp.deprioratize_time
+        }
+
     # Fetch recently rejected AND approved proposals (displayed for a week)
     one_week_ago = now_utc - timedelta(days=7)
     recently_rejected_and_approved_proposals = db.query(SpawnChangeProposal).filter(
@@ -402,6 +418,38 @@ async def get_spawn_detail_page(
         Character.validation_hash.is_(None)  # Only validated characters
     ).count()
 
+    active_cutoff = now_utc + bid_settings['locking_period']
+
+    # Get active bids (where hunt_window_end > now + locking_period)
+    active_bids = db.query(Bid).filter(
+        Bid.spawn_id == spawn.id,
+        Bid.hunt_window_end > active_cutoff
+    ).order_by(Bid.hunt_window_end.asc()).all()
+
+    # Calculate time window for expired bids (last 10am CET to next 10am CET)
+    cet = pytz.timezone('Europe/Berlin')
+    now_cet = now_utc.astimezone(cet)
+
+    # Get today's 10am CET
+    today_10am_cet = cet.localize(datetime.combine(now_cet.date(), time(10, 0)))
+
+    # If current time is before 10am CET, show from yesterday 10am
+    if now_cet.time() < time(10, 0):
+        start_window = today_10am_cet - timedelta(days=1)
+    else:
+        start_window = today_10am_cet
+
+    end_window = start_window + timedelta(days=1)
+
+    # Get expired bids within this window
+    expired_bids = db.query(Bid).filter(
+        Bid.spawn_id == spawn.id,
+        Bid.hunt_window_end <= active_cutoff,
+        Bid.hunt_window_end >= start_window.astimezone(UTC),
+        Bid.hunt_window_end < end_window.astimezone(UTC)
+    ).order_by(Bid.hunt_window_end.desc()).all()
+
+
     return templates.TemplateResponse(
         "spawn_detail.html",
         {
@@ -413,6 +461,9 @@ async def get_spawn_detail_page(
             "active_character_count": active_character_count,
             "last_approved_permanent_proposal": last_approved_permanent_proposal,
             "last_approved_temporary_proposal": last_approved_temporary_proposal,
+            "bid_settings": bid_settings,
+            "active_bids": active_bids,
+            "expired_bids": expired_bids,
             "recently_rejected_proposals": recently_rejected_and_approved_proposals, # Pass the combined list
             "pending_proposals": pending_proposals,
             "now_utc": now_utc, # Pass current UTC time for template logic

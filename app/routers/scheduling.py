@@ -129,8 +129,13 @@ async def post_bid(
     user_id = request.session.get('user_id')
     user = db.query(User).filter(User.id == user_id).first()
 
+    logger.info(f"POST bid attempt - User ID: {user_id}, World: {world_name}, Spawn: {spawn_name}")
+    logger.info(f"Form data - spawn_id: {spawn_id}, hunt_window_start: {hunt_window_start}, hunt_window_end: {hunt_window_end}")
+    logger.info(f"Form data - preferred_duration: {preferred_hunt_duration_minutes}, bid_points: {bid_points}")
+
     # If user not logged in, redirect to login page
     if not user:
+        logger.warning(f"User not logged in for bid submission")
         request.session.pop('user_id', None)
         request.session.pop('username', None)
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -151,8 +156,8 @@ async def post_bid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spawn not found in this world.")
 
     # Base URL for redirecting back to the bid form with an error
-    redirect_url_base = f"/worlds/{world.name}/spawns/{spawn.name}/bid"
-    redirect_to_spawn_page = f"/worlds/{world.name}/spawns/{spawn.name}"
+    redirect_url_base = f"/worlds/{world_name}/spawns/{spawn_name}/bid"
+    redirect_to_spawn_page = f"/worlds/{world_name}/spawns/{spawn_name}"
 
     # Parse datetime strings to UTC datetime objects
     try:

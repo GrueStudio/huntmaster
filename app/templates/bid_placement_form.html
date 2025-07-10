@@ -29,7 +29,38 @@ breadcrumbs=breadcrumbs) %}
     </div>
     {% endif %}
 
-    <form id="bidForm" class="space-y-8">
+    <form
+        id="bidForm"
+        method="POST"
+        action="/worlds/{{ world.name }}/spawns/{{ spawn.name }}/bid"
+        class="space-y-8"
+    >
+        <!-- Hidden form fields for submission -->
+        <input
+            type="hidden"
+            name="spawn_id"
+            id="hiddenSpawnId"
+            value="{{ spawn.id }}"
+        />
+        <input
+            type="hidden"
+            name="hunt_window_start"
+            id="hiddenHuntWindowStart"
+            value=""
+        />
+        <input
+            type="hidden"
+            name="hunt_window_end"
+            id="hiddenHuntWindowEnd"
+            value=""
+        />
+        <input
+            type="hidden"
+            name="preferred_hunt_duration_minutes"
+            id="hiddenPreferredDurationMinutes"
+            value=""
+        />
+        <input type="hidden" name="bid_points" id="hiddenBidPoints" value="" />
         <!-- Preferred Hunt Duration Slider -->
         <div
             class="p-6 bg-gray-700 rounded-xl shadow-inner border border-gray-600"
@@ -139,21 +170,53 @@ breadcrumbs=breadcrumbs) %}
 <script src="/static/localize_time.js?v={{ cache_buster }}"></script>
 
 <style>
-    /* Override tww-time-label styles for better visibility */
+    /* Add this CSS to your tww.css file or in a <style> tag */
+
     .tww-time-label {
-        font-size: 1.1rem; /* Larger font */
-        font-weight: bold; /* Bolder text */
-        color: #1e90ff; /* DodgerBlue, matching selection border */
-        background-color: rgba(
-            255,
-            255,
-            255,
-            0.9
-        ); /* Slightly opaque white background */
-        padding: 4px 8px; /* Padding for readability */
-        border-radius: 4px; /* Rounded corners */
-        bottom: -35px; /* Adjust position further down if needed */
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: -35px; /* Position below the widget */
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #1e90ff; /* DodgerBlue */
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 4px 8px;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        white-space: nowrap;
+        z-index: 10;
+        pointer-events: none; /* Prevent interference with widget interaction */
+        display: block; /* Ensure it's visible */
+        visibility: visible; /* Ensure it's visible */
+    }
+
+    /* Alternative positioning - inside the widget */
+    .tww-time-label.inside {
+        bottom: auto;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+    }
+
+    /* Make sure the container has relative positioning for absolute positioning to work */
+    .tww-container {
+        position: relative;
+        margin-bottom: 50px; /* Add space for the label below */
+    }
+
+    /* Mobile responsive adjustments */
+    @media (max-width: 768px) {
+        .tww-time-label {
+            font-size: 1rem;
+            padding: 3px 6px;
+            bottom: -30px;
+        }
+
+        .tww-container {
+            margin-bottom: 40px;
+        }
     }
 </style>
 
@@ -281,13 +344,20 @@ breadcrumbs=breadcrumbs) %}
             const bidPoints = parseInt(bidPointsSlider.value);
 
             // Populate hidden input fields
-            hiddenHuntWindowStart.value = huntWindowStartISO;
-            hiddenHuntWindowEnd.value = huntWindowEndISO;
-            hiddenPreferredDurationMinutes.value = preferredDuration;
-            hiddenBidPoints.value = bidPoints;
+            if (hiddenHuntWindowStart) hiddenHuntWindowStart.value = huntWindowStartISO;
+            if (hiddenHuntWindowEnd) hiddenHuntWindowEnd.value = huntWindowEndISO;
+            if (hiddenPreferredDurationMinutes) hiddenPreferredDurationMinutes.value = preferredDuration;
+            if (hiddenBidPoints) hiddenBidPoints.value = bidPoints;
+
+            // Debug logging
+            console.log("Form data prepared for submission:");
+            console.log("- Hunt Window Start:", huntWindowStartISO);
+            console.log("- Hunt Window End:", huntWindowEndISO);
+            console.log("- Preferred Duration:", preferredDuration);
+            console.log("- Bid Points:", bidPoints);
+            console.log("- Spawn ID:", spawnId);
 
             // Allow the form to submit normally
-            console.log("Form data prepared for submission. Allowing browser to POST.");
             // No e.preventDefault() here, so the form will submit.
         });
 
@@ -300,6 +370,34 @@ breadcrumbs=breadcrumbs) %}
                 twwContainer._twwInstance.updateDisplay(); // Ensure TWW updates its display based on initial settings
             }
         });
+    });
+    // Add this debug code to your page after the TWW widget loads
+    // This will help identify if the label element exists and is being updated
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Wait for TWW to initialize
+        setTimeout(() => {
+            const container = document.getElementById('timeWindowWidget');
+            const label = container.querySelector('.tww-time-label');
+
+            if (label) {
+                // Clear any existing inline styles that might be interfering
+                label.removeAttribute('style');
+
+                // Add only the essential styles via CSS class
+                label.classList.add('tww-time-label-visible');
+
+                // Ensure the container has relative positioning
+                if (window.getComputedStyle(container).position === 'static') {
+                    container.style.position = 'relative';
+                }
+
+                // Force an update to populate the label
+                if (container._twwInstance) {
+                    container._twwInstance.updateDisplay();
+                }
+            }
+        }, 500);
     });
 </script>
 {% endcall %}

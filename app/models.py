@@ -67,6 +67,8 @@ class User(Base):
     notifications = relationship('Notification', back_populates='user') # Added back_populates
     votes = relationship('Vote', back_populates='user', lazy='select')
     bids = relationship('Bid', back_populates='user', lazy='select')
+    hunts = relationship('Hunt', back_populates='user')
+    timeslots = relationship('TimeSlot', back_populates='user', lazy='select')
 
     sponsored_proposals = relationship(
         "SpawnProposal",
@@ -124,7 +126,7 @@ class Character(Base):
 
     user = relationship('User', back_populates='characters')
     world = relationship('World', back_populates='characters')
-    hunts = relationship('Hunt', back_populates='character')
+
 
     __table_args__ = (
         UniqueConstraint('name', 'user_id', name='_name_user_id_uc'),
@@ -231,6 +233,7 @@ class Spawn(Base):
     change_proposals = relationship('SpawnChangeProposal', back_populates='spawn')
     hunts = relationship('Hunt', back_populates='spawn', lazy='select')
     bids = relationship('Bid', back_populates='spawn', lazy='select')
+    timeslots = relationship('TimeSlot', back_populates='spawn', lazy='select')
 
     # Updated: Using association table for favourited by users
     favourited_by = relationship(
@@ -438,6 +441,17 @@ class Bid(Base):
     )
     user = relationship('User', back_populates='bids', lazy='select')
     spawn = relationship('Spawn', back_populates='bids', lazy='select')
+    hunt = relationship('Hunt', back_populates='bid', lazy='select')
+    timeslots = relationship('TimeSlot', back_populates='bid', lazy='select')
+
+    @hybrid_property
+    def deadline(self):
+        """Calculates the total downvotes for this change proposal."""
+        return self.hunt_window_end - self.claim_time
+
+    @deadline.expression
+    def deadline_sql(cls):
+        return cls.hunt_window_end - cls.claim_time
 
     def __repr__(self):
         return f'<Bid {self.id} - {self.character.name} on {self.spawn.name}>'
@@ -445,15 +459,32 @@ class Bid(Base):
 class Hunt(Base):
     __tablename__ = 'hunts'
     id = Column(Integer, primary_key=True)
-    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     points_paid = Column(Integer, default=0)
     bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
-    character = relationship('Character', back_populates='hunts', lazy='select')
+
+    user = relationship('User', back_populates='hunts', lazy='select')
     spawn = relationship('Spawn', back_populates='hunts', lazy='select')
-    bid = relationship('Bid')
+    bid = relationship('Bid', lazy='select')
 
     def __repr__(self):
-        return f'<Hunt {self.id} - {self.character.name} on {self.spawn.name}>'
+        return f'<Hunt {self.id} - {self.user.name} on {self.spawn.name}>'
+
+
+class TimeSlot(Base):
+    __tablename__ = 'timeslots'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    points_paid = Column(Integer, default=0)
+    bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
+
+    user = relationship('User', back_populates='timeslots', lazy='select')
+    spawn = relationship('Spawn', back_populates='timeslots', lazy='select')
+    bid = relationship('Bid', back_populates='timeslots', lazy='select')
