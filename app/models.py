@@ -436,8 +436,6 @@ class Bid(Base):
 
     __table_args__ = (
         CheckConstraint('hunt_window_end > hunt_window_start', name='_end_after_start'),
-        # Add a check constraint to ensure scheduled_start is within hunt_window
-        CheckConstraint('scheduled_start >= hunt_window_start AND scheduled_start <= hunt_window_end', name='_scheduled_start_within_window'),
     )
     user = relationship('User', back_populates='bids', lazy='select')
     spawn = relationship('Spawn', back_populates='bids', lazy='select')
