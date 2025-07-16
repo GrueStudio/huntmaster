@@ -325,8 +325,8 @@ breadcrumbs=breadcrumbs) %}
                 const localEndDateTime = twwInstance.twwValue.end;     // Access as getter
 
                 // Convert to UTC ISO strings using localize_time.js helper
-                huntWindowStartISO = window.convertLocalToUtcIso(localStartDateTime.toISOString().slice(0, 16));
-                huntWindowEndISO = window.convertLocalToUtcIso(localEndDateTime.toISOString().slice(0, 16));
+                huntWindowStartISO = localStartDateTime.toISOString();
+                huntWindowEndISO = localEndDateTime.toISOString();
 
                 if (!huntWindowStartISO || !huntWindowEndISO) {
                     alert("Error: Could not convert time window to UTC. Please ensure valid time selection.");

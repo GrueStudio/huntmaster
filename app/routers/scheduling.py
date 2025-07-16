@@ -10,7 +10,7 @@ from typing import Annotated # For FastAPI dependency injection with Form/Body
 from database import get_db
 from models import World, Spawn, SpawnChangeProposal, ProposalStatus, User, Points, Bid # Import Points and Bid models
 from templating import templates
-from scheduler import Scheduler
+from scheduler import SmartScheduler
 
 import logging
 
@@ -245,16 +245,19 @@ async def post_bid(
         db.commit()
         db.refresh(new_bid)
 
-        scheduler = Scheduler(db)
-        if not scheduler.update_spawn_schedule(spawn.id):
-            logger.warning(f"Schedule update failed for spawn {spawn.name}")
-        else:
-            logger.info(f"Schedule updated for spawn {spawn.name}")
-
     except Exception as e:
         db.rollback()
         logger.error(f"Error placing bid for user {user.id} on spawn {spawn.name}: {e}")
         return RedirectResponse(url=f"{redirect_url_base}?error=Failed to place bid due to a database error.", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        # Run Smart Scheduler Trigger here
+        scheduler = SmartScheduler(db)
+        result = scheduler.update_spawn_schedule(spawn.id)
+        logger.info(f"{result}")
+    except Exception as e:
+        logger.warn("Failed to update schedule")
+        logger.error(f"{e}")
 
     return RedirectResponse(
         url=f"{redirect_to_spawn_page}?message=Bid placed successfully!",

@@ -1,8 +1,8 @@
-import os, time
+import os, time, asyncio
 from datetime import datetime, UTC
 import httpx # Import httpx for making async HTTP requests
 
-from fastapi import FastAPI, Request, status, Depends
+from fastapi import FastAPI, Request, status, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from templating import templates
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 # Assuming database.py and models.py are in the same 'app' directory
 from database import get_db
 from routers import accounts, characters, spawns, scheduling, api
+from scheduler import SmartScheduler
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,40 @@ class NoCacheStaticFiles(StaticFiles):
 
 app.mount("/static", NoCacheStaticFiles(directory="static"), name="static")
 
+# Global scheduler task control
+scheduler_task = None
+scheduler_running = False
+
+# --- Background Scheduler Functions ---
+async def background_scheduler():
+    """Background task that runs smart scheduling at regular intervals"""
+    global scheduler_running
+    logger.info("Background scheduler started - entering main loop")  # Add this
+    while scheduler_running:
+        try:
+            logger.info("Starting scheduler iteration")  # Add debug log
+            db_session = next(get_db())
+            try:
+                scheduler = SmartScheduler(db_session)
+
+                # Check if we need to run scheduling
+                if scheduler.should_run_full_schedule():
+                    logger.info("Running background smart scheduling update...")
+                    result = scheduler.smart_update()
+                    logger.info(f"Background scheduling completed: {result}")
+                else:
+                    logger.info("No spawns need immediate scheduling")
+
+            except Exception as e:
+                logger.error(f"Scheduler iteration error: {e}", exc_info=True)
+            finally:
+                db_session.close()
+
+        except Exception as e:
+            logger.error(f"Background scheduler error: {e}", exc_info=True)
+
+        # Wait before next check
+        await asyncio.sleep(60)
 
 
 # --- Helper Function for Timezone Conversion ---
@@ -50,7 +85,6 @@ def convert_to_utc_naive(dt: datetime) -> datetime:
         return dt.astimezone(UTC).replace(tzinfo=None)
     else:
         return dt # Assuming naive inputs are already UTC for simplicity here.
-
 
 # --- World Update Function ---
 async def update_worlds_from_tibiadata(db: Session):
@@ -97,10 +131,11 @@ async def update_worlds_from_tibiadata(db: Session):
         logger.error(f"An unexpected error occurred while updating worlds: {e}")
         db.rollback()
 
-
 # --- Database Initialization (for development/testing) ---
 @app.on_event("startup")
 async def on_startup():
+    global scheduler_task, scheduler_running
+
     # Call the world update function on startup
     db_session = next(get_db()) # Get a session for the startup event
     try:
@@ -108,11 +143,26 @@ async def on_startup():
     finally:
         db_session.close()
 
+    logger.info("Starting background services...")
+
+    # Start the background scheduler
+    scheduler_running = True
+    scheduler_task = asyncio.create_task(background_scheduler())
+    logger.info(f"Created background scheduler task: {scheduler_task}")  # Log the task
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    pass
+    global scheduler_task, scheduler_running
 
+    # Stop the background scheduler
+    scheduler_running = False
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("Background scheduler stopped")
 
 # --- Include Routers ---
 app.include_router(accounts.router)
@@ -121,8 +171,18 @@ app.include_router(spawns.router)
 app.include_router(scheduling.router)
 app.include_router(api.router)
 
-# --- Main Routes ---
+# --- API endpoint for manual scheduling trigger ---
+@app.post("/api/trigger-scheduling")
+async def manual_trigger_scheduling(
+    background_tasks: BackgroundTasks,
+    spawn_id: int = None,
+    db: Session = Depends(get_db)
+):
+    """Manual trigger for scheduling - useful for testing or admin purposes"""
+    background_tasks.add_task(trigger_smart_scheduling, spawn_id)
+    return {"message": f"Scheduling triggered for spawn {spawn_id if spawn_id else 'all spawns'}"}
 
+# --- Main Routes ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     if 'username' in request.session:
@@ -221,3 +281,6 @@ if os.environ.get("DEBUG_MODE") == "true":
             "request": request,
             "test_output": test_results
         })
+
+# Make the trigger function available for import
+__all__ = ['trigger_smart_scheduling']

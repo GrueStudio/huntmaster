@@ -104,8 +104,8 @@ class RecoveryToken(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     token = Column(String(255), unique=True, nullable=False)
-    expiration_time = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    expiration_time = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     used = Column(Boolean, default=False, nullable=False)
 
     user = relationship('User', back_populates='recovery_tokens')
@@ -120,7 +120,7 @@ class Character(Base):
     level = Column(Integer, nullable=False) # Added back, nullable
     vocation = Column(String(50), nullable=False) # Added back, nullable
     user_id = Column(Integer, ForeignKey('users.id')) # Changed to nullable for disown
-    last_login = Column(DateTime, nullable=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
     world_id = Column(Integer, ForeignKey('worlds.id'), nullable=False)
     validation_hash = Column(String(120), unique=True, nullable=True) # NULL means validated, non-NULL means pending validation
 
@@ -430,8 +430,8 @@ class Bid(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     bid_points = Column(Integer, nullable=False)
-    hunt_window_start = Column(DateTime, nullable=False) # Renamed from start_time
-    hunt_window_end = Column(DateTime, nullable=False) # Renamed from end_time
+    hunt_window_start = Column(DateTime(timezone=True), nullable=False) # Renamed from start_time
+    hunt_window_end = Column(DateTime(timezone=True), nullable=False) # Renamed from end_time
     claim_time = Column(Interval, nullable=False)
 
     __table_args__ = (
@@ -459,8 +459,8 @@ class Hunt(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
     points_paid = Column(Integer, default=0)
     bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
 
@@ -478,8 +478,8 @@ class TimeSlot(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
     points_paid = Column(Integer, default=0)
     bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
 
