@@ -3,8 +3,8 @@
 from typing import Optional
 from datetime import datetime, timedelta, UTC
 from zoneinfo import ZoneInfo
-from sqlalchemy.orm import Session
-from models import Bid, Hunt, Spawn, TimeSlot
+from sqlalchemy.orm import Session, joinedload
+from models import Bid, Hunt, Spawn, TimeSlot, BidStatus, PointLedger
 import logging
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class SmartScheduler:
         lock_threshold = now + spawn.locking_period
         logger.info(f"Current time: {now}, Lock threshold: {lock_threshold}")
 
-        timeslots_to_lock = self.db.query(TimeSlot).filter(
+        timeslots_to_lock = self.db.query(TimeSlot).options(joinedload(TimeSlot.bid)).filter(
             TimeSlot.spawn_id == spawn_id,
             TimeSlot.start_time <= lock_threshold,
             TimeSlot.start_time > now  # Only future timeslots
@@ -140,6 +140,9 @@ class SmartScheduler:
             self.db.add(hunt)
             locked_hunts.append(hunt)
 
+            timeslot.bid.status = BidStatus.SUCCESSFUL
+
+            self.db.add(timeslot.bid)
             # Remove the locked timeslot
             self.db.delete(timeslot)
 
@@ -180,7 +183,8 @@ class SmartScheduler:
 
         active_bids = self.db.query(Bid).filter(
             Bid.spawn_id == spawn_id,
-            Bid.deadline > now
+            Bid.deadline > now,
+            Bid.status == BidStatus.PENDING
         ).all()
 
         if not active_bids:
@@ -252,6 +256,8 @@ class SmartScheduler:
         try:
             now = datetime.now(UTC)
 
+            failed_bids = self.mark_expired_bids(spawn_id, now)
+
             # Step 1: Lock timeslots that are within locking period
             locked_hunts = self.lock_timeslots_to_hunts(spawn_id, now)
 
@@ -275,7 +281,8 @@ class SmartScheduler:
                 'locked_hunts': len(locked_hunts),
                 'deleted_timeslots': deleted_timeslots,
                 'new_timeslots': len(time_slots),
-                'earliest_future_hunt': self.get_earliest_future_hunt(spawn_id, now)
+                'earliest_future_hunt': self.get_earliest_future_hunt(spawn_id, now),
+                'failed_bids': failed_bids
             }
 
         except Exception as e:
@@ -307,7 +314,8 @@ class SmartScheduler:
         # Spawns with recent bid changes (you'd need to track this)
         # For now, just return all spawns with active bids
         spawns_with_bids = self.db.query(Spawn.id).join(Bid).filter(
-            Bid.deadline > now
+            Bid.deadline > now,
+            Bid.status == BidStatus.PENDING
         ).distinct().all()
 
         return list(set([s.id for s in spawns_for_locking + spawns_with_bids]))
@@ -347,9 +355,12 @@ class SmartScheduler:
         try:
             now = datetime.now(UTC)
 
+            payout_results = self.process_completed_hunts()
+
             # Get all spawns with active bids
             spawns_with_bids = self.db.query(Spawn).join(Bid).filter(
-                Bid.deadline > now
+                Bid.deadline > now,
+                Bid.status == BidStatus.PENDING
             ).distinct().all()
 
             total_summary = {
@@ -358,7 +369,8 @@ class SmartScheduler:
                 'total_locked_hunts': 0,
                 'total_deleted_timeslots': 0,
                 'total_new_timeslots': 0,
-                'spawn_details': {}
+                'spawn_details': {},
+                'payout_results': payout_results
             }
 
             for spawn in spawns_with_bids:
@@ -426,6 +438,25 @@ class SmartScheduler:
             'active_bids': len(active_bids)
         }
 
+    def mark_expired_bids(self, spawn_id: int, now: datetime = None) -> int:
+        """Mark bids past deadline as FAILED and return count of affected bids"""
+        now = now or datetime.now(UTC)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+
+        result = self.db.query(Bid)\
+            .filter(
+                Bid.spawn_id == spawn_id,
+                Bid.deadline <= now,
+                Bid.status == BidStatus.PENDING
+            )\
+            .update({"status": BidStatus.FAILED})
+
+        self.db.commit()
+        logger.info(f"Marked {result} bids as FAILED for spawn {spawn_id}")
+        return result
+
+
     def spawn_needs_immediate_update(self, spawn_id: int) -> bool:
         """
         Check if a spawn needs immediate scheduling update.
@@ -446,3 +477,35 @@ class SmartScheduler:
         ).count()
 
         return timeslots_near_lock > 0
+
+    def process_completed_hunts(self) -> dict:
+        """
+        Find completed hunts and process payouts.
+        Returns summary of processed hunts.
+        """
+        now = datetime.now(UTC)
+        completed_hunts = self.db.query(Hunt).filter(
+            Hunt.end_time <= now,
+            Hunt.points_paid > 0,
+            ~Hunt.ledger_entries.any()  # Only process hunts without existing payouts
+        ).all()
+
+        results = {}
+
+        for hunt in completed_hunts:
+            try:
+                result = hunt.execute_payouts(self.db)
+                results[hunt.id] = {
+                    'spawn_id': hunt.spawn_id,
+                    'user_id': hunt.user_id,
+                    'payouts_issued': len(result.get('user_payouts', {})),
+                    'total_points_distributed': sum(result.get('user_payouts', {}).values())
+                }
+            except Exception as e:
+                logger.error(f"Failed to process payouts for hunt {hunt.id}: {e}")
+                results[hunt.id] = {'error': str(e)}
+
+        return {
+            'total_processed': len(completed_hunts),
+            'results': results
+        }

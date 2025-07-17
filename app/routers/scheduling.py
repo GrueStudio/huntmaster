@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, UTC
 from typing import Annotated # For FastAPI dependency injection with Form/Body
 
 from database import get_db
-from models import World, Spawn, SpawnChangeProposal, ProposalStatus, User, Points, Bid # Import Points and Bid models
+from models import World, Spawn, SpawnChangeProposal, ProposalStatus, User, Points, Bid, BidStatus # Import Points and Bid models
 from templating import templates
 from scheduler import SmartScheduler
 
@@ -185,6 +185,7 @@ async def post_bid(
     existing_bids = db.query(Bid).filter(
         Bid.user_id == user.id,
         Bid.spawn_id == spawn.id,
+        Bid.status == BidStatus.PENDING,
         # Check for any overlap with the new bid's window
         Bid.hunt_window_start < parsed_hunt_window_end,
         Bid.hunt_window_end > parsed_hunt_window_start

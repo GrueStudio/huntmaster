@@ -8,7 +8,7 @@ from datetime import datetime, UTC, timedelta
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, Boolean, Numeric, event, Enum, Table, Interval
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func, select, and_
+from sqlalchemy.sql import func, select
 from sqlalchemy.ext.hybrid import hybrid_property
 
 class ProposalStatus(enum.Enum):
@@ -26,6 +26,11 @@ class NotificationType(enum.Enum):
 class VoteType(enum.Enum):
     UPVOTE = "upvote"
     DOWNVOTE = "downvote"
+
+class BidStatus(enum.Enum):
+    PENDING = "PENDING"
+    SUCCESSFUL = "SUCCESSFUL"
+    FAILED = "FAILED"
 
 Base = declarative_base()
 
@@ -430,6 +435,7 @@ class Bid(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
     bid_points = Column(Integer, nullable=False)
+    status = Column(Enum(BidStatus), nullable=False, default=BidStatus.PENDING)
     hunt_window_start = Column(DateTime(timezone=True), nullable=False) # Renamed from start_time
     hunt_window_end = Column(DateTime(timezone=True), nullable=False) # Renamed from end_time
     claim_time = Column(Interval, nullable=False)
@@ -468,6 +474,143 @@ class Hunt(Base):
     spawn = relationship('Spawn', back_populates='hunts', lazy='select')
     bid = relationship('Bid', lazy='select')
 
+    def calculate_payouts(self, db) -> dict:
+        """
+        Calculate payouts using all time window boundaries for precise distribution.
+        Returns: {
+            'time_segments': list of payout segments,
+            'user_payouts': {user_id: total_points},
+            'total_points': total_points_distributed
+        }
+        """
+        if self.end_time > datetime.now(UTC):
+            raise ValueError("Cannot calculate payouts for ongoing hunts")
+
+        # Get all eligible bids (failed or pending) that overlap with this hunt
+        overlapping_bids = db.query(Bid).filter(
+            Bid.spawn_id == self.spawn_id,
+            Bid.status.in_([BidStatus.FAILED, BidStatus.PENDING]),
+            Bid.hunt_window_start < self.end_time,
+            Bid.hunt_window_end > self.start_time,
+            Bid.id != self.bid_id  # Exclude the winning bid
+        ).all()
+
+        if not overlapping_bids:
+            return {'time_segments': [], 'user_payouts': {}, 'total_points': 0}
+
+        # Collect all time boundaries (start/end of hunt and all bid windows)
+        time_points = {self.start_time, self.end_time}
+        for bid in overlapping_bids:
+            time_points.add(bid.hunt_window_start)
+            time_points.add(bid.hunt_window_end)
+
+        # Sort all time points and filter those within hunt duration
+        sorted_times = sorted(t for t in time_points if self.start_time < t < self.end_time)
+        if not sorted_times:
+            # Edge case where bids exactly match hunt boundaries
+            sorted_times = [self.start_time, self.end_time]
+        else:
+            # Ensure we cover full hunt duration
+            if sorted_times[0] != self.start_time:
+                sorted_times.insert(0, self.start_time)
+            if sorted_times[-1] != self.end_time:
+                sorted_times.append(self.end_time)
+
+        segments = []
+        user_payouts = defaultdict(int)
+        total_points = 0
+
+        # Calculate payouts for each time segment
+        for i in range(len(sorted_times) - 1):
+            segment_start = sorted_times[i]
+            segment_end = sorted_times[i + 1]
+            segment_minutes = (segment_end - segment_start).total_seconds() / 60
+
+            # Find bids active during this segment
+            active_bids = [
+                bid for bid in overlapping_bids
+                if bid.hunt_window_start < segment_end
+                and bid.hunt_window_end > segment_start
+            ]
+
+            if not active_bids:
+                continue
+
+            # Calculate points for this segment (proportional to time)
+            segment_points = int((segment_minutes / (self.duration_minutes())) * self.points_paid)
+            points_per_bid = segment_points // len(active_bids)
+
+            # Record payouts for this segment
+            segment_data = {
+                'start': segment_start,
+                'end': segment_end,
+                'minutes': segment_minutes,
+                'bids': [],
+                'total_points': points_per_bid * len(active_bids)
+            }
+
+            for bid in active_bids:
+                user_payouts[bid.user_id] += points_per_bid
+                segment_data['bids'].append({
+                    'bid_id': bid.id,
+                    'user_id': bid.user_id,
+                    'points': points_per_bid
+                })
+
+            segments.append(segment_data)
+            total_points += segment_data['total_points']
+
+        return {
+            'time_segments': segments,
+            'user_payouts': dict(user_payouts),
+            'total_points': total_points
+        }
+
+    def duration_minutes(self) -> float:
+        """Calculate hunt duration in minutes"""
+        return (self.end_time - self.start_time).total_seconds() / 60
+
+    def execute_payouts(self, db) -> dict:
+        """Execute payouts only if overlapping bids exist"""
+        payout_data = self.calculate_payouts(db)
+
+        # Only proceed if there are overlapping bids
+        if not payout_data.get('time_segments'):
+            return {
+                'status': 'no_competition',
+                'action': 'no_points_deducted',
+                'total_points': 0
+            }
+
+        # 1. Deduct from winner (only reaches here if competition exists)
+        winner_entry = PointLedger(
+            user_id=self.user_id,
+            spawn_id=self.spawn_id,
+            amount=-self.points_paid,
+            hunt_id=self.id,
+            bid_id=self.bid_id,
+            description=f"Points spent for competitive hunt {self.id}"
+        )
+        db.add(winner_entry)
+
+        # 2. Distribute to overlapping bids
+        for segment in payout_data['time_segments']:
+            for bid_payout in segment['bids']:
+                db.add(PointLedger(
+                    user_id=bid_payout['user_id'],
+                    spawn_id=self.spawn_id,
+                    amount=bid_payout['points'],
+                    hunt_id=self.id,
+                    bid_id=bid_payout['bid_id'],
+                    description=f"Payout for {segment['minutes']:.1f}m overlap"
+                ))
+
+        db.commit()
+        return {
+            **payout_data,
+            'status': 'payout_completed',
+            'total_deducted': self.points_paid
+        }
     def __repr__(self):
         return f'<Hunt {self.id} - {self.user.name} on {self.spawn.name}>'
 
@@ -486,3 +629,35 @@ class TimeSlot(Base):
     user = relationship('User', back_populates='timeslots', lazy='select')
     spawn = relationship('Spawn', back_populates='timeslots', lazy='select')
     bid = relationship('Bid', back_populates='timeslots', lazy='select')
+
+
+class PointLedger(Base):
+    __tablename__ = 'point_ledger'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    spawn_id = Column(Integer, ForeignKey('spawns.id'), nullable=False)
+    amount = Column(Numeric, nullable=False)  # Positive (credit) or negative (debit)
+    hunt_id = Column(Integer, ForeignKey('hunts.id'), nullable=True)
+    bid_id = Column(Integer, ForeignKey('bids.id'), nullable=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    description = Column(String(255), nullable=True)
+
+    user = relationship('User', backref='ledger_entries')
+    spawn = relationship('Spawn')
+    hunt = relationship('Hunt')
+    bid = relationship('Bid')
+
+    @staticmethod
+    def on_insert(mapper, connection, target):
+        """Automatically update Points table when ledger entry is created"""
+        points_table = Points.__table__
+        connection.execute(
+            points_table.update()
+            .where((points_table.c.user_id == target.user_id) &
+                   (points_table.c.spawn_id == target.spawn_id))
+            .values(points=points_table.c.points + target.amount)
+        )
+
+# Register the event listener
+event.listen(PointLedger, 'after_insert', PointLedger.on_insert)
